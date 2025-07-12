@@ -1,58 +1,78 @@
 import streamlit as st
-import openai
+import streamlit.components.v1 as components
+import base64
 import tempfile
 import os
-import subprocess
+from openai import OpenAI
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 from io import BytesIO
 
-# OpenAI-Client
-from openai import OpenAI
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-SYSTEM_PROMPT = """Du bist ein medizinischer Assistent, der aus Transkripten von Arzt-Patienten-Gesprächen strukturierte Arztbriefe erstellt.
+st.set_page_config(page_title="🎤 Arztbrief aus Browser-Aufnahme", layout="centered")
+st.title("🎤 Arztbrief aus Audioaufnahme (Browser)")
+
+st.markdown("🎙️ Nimm ein Arzt-Patienten-Gespräch direkt im Browser auf und erhalte automatisch einen strukturierten Arztbrief.")
+
+# === HTML + JS Recorder ===
+components.html("""
+<script>
+let mediaRecorder;
+let audioChunks = [];
+function startRecording() {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+            mediaRecorder = new MediaRecorder(stream);
+            audioChunks = [];
+            mediaRecorder.ondataavailable = event => {
+                audioChunks.push(event.data);
+            };
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(audioChunks, { type: 'audio/webm' });
+                const reader = new FileReader();
+                reader.readAsDataURL(blob);
+                reader.onloadend = () => {
+                    const base64data = reader.result.split(',')[1];
+                    const streamlitMsg = {"isStreamlitMessage":true,"type":"streamlit:setComponentValue","value":base64data};
+                    window.parent.postMessage(streamlitMsg, "*");
+                };
+            };
+            mediaRecorder.start();
+        });
+}
+function stopRecording() {
+    mediaRecorder.stop();
+}
+</script>
+<button onclick="startRecording()">🎙️ Aufnahme starten</button>
+<button onclick="stopRecording()">⏹️ Aufnahme stoppen</button>
+""", height=150)
+
+# Empfange Aufnahme
+audio_base64 = st.experimental_get_query_params().get("value")
+
+def transcribe_webm_bytes(audio_bytes):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as f:
+        f.write(audio_bytes)
+        f.flush()
+        with open(f.name, "rb") as audio_file:
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+                language="de"
+            )
+    return transcript.text
+
+def generate_report_with_gpt(transkript):
+    SYSTEM_PROMPT = """Du bist ein medizinischer Assistent, der aus Transkripten von Arzt-Patienten-Gesprächen strukturierte Arztbriefe erstellt.
 Gliedere den Brief in folgende Abschnitte:
 
 Anamnese, Diagnose, Therapie, Aufklärung, Organisatorisches, Operationsplanung, Patientenwunsch.
 
 Formuliere die Diagnosen möglichst ICD-10-nah, z. B. 'Essentielle Hypertonie' statt 'Bluthochdruck'.
 Verwende eine sachliche, medizinisch korrekte Ausdrucksweise. Vermute keine Inhalte, die nicht im Text vorkommen."""
-
-# === Funktionen ===
-
-def transcribe_audio(uploaded_file):
-    suffix = os.path.splitext(uploaded_file.name)[-1]
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as in_file:
-        in_file.write(uploaded_file.read())
-        in_path = in_file.name
-
-    out_path = in_path.replace(suffix, ".wav")
-    try:
-        subprocess.run(
-            ["ffmpeg", "-i", in_path, "-ar", "16000", "-ac", "1", "-f", "wav", out_path],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
-
-        with open(out_path, "rb") as f:
-            transcript = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=f,
-                language="de"
-            )
-        return transcript.text
-
-    except Exception as e:
-        raise RuntimeError(f"Fehler bei Audioverarbeitung: {e}")
-
-    finally:
-        if os.path.exists(in_path): os.remove(in_path)
-        if os.path.exists(out_path): os.remove(out_path)
-
-def generate_report_with_gpt(transkript):
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": f"Hier ist das Gespräch:\n{transkript}"}
@@ -146,24 +166,16 @@ def create_pdf_report(brief_text, logo_path=None):
     buffer.seek(0)
     return buffer
 
-# === Streamlit UI ===
+# === Auswertung nach Aufnahme ===
+if audio_base64:
+    st.success("🎧 Aufnahme erfolgreich übertragen.")
+    audio_bytes = base64.b64decode(audio_base64[0])
+    st.audio(audio_bytes, format="audio/webm")
 
-st.set_page_config(page_title="Arztbrief aus Audio", layout="centered")
-st.title("🎤 Arztbrief aus Audioaufnahme")
-st.markdown("Lade ein Arzt-Patienten-Gespräch hoch (mp3/wav/m4a). Der strukturierte Arztbrief wird automatisch erstellt.")
-
-audio_file = st.file_uploader("📁 Audioaufnahme hochladen", type=["mp3", "wav", "m4a"])
-
-if audio_file:
-    with st.spinner("🔍 Transkription läuft…"):
-        try:
-            transkript = transcribe_audio(audio_file)
-            st.success("✅ Transkription abgeschlossen.")
-            st.subheader("📝 Transkript")
-            st.text_area("Transkribierter Text", transkript, height=250)
-        except Exception as e:
-            st.error(str(e))
-            st.stop()
+    with st.spinner("🧠 Transkription läuft…"):
+        transkript = transcribe_webm_bytes(audio_bytes)
+        st.subheader("📝 Transkript")
+        st.text_area("Transkribierter Text", transkript, height=250)
 
     if st.button("🧠 Arztbrief generieren mit GPT"):
         with st.spinner("💬 GPT analysiert das Gespräch…"):
@@ -179,7 +191,7 @@ if audio_file:
         st.text(gpt_icds)
 
         st.subheader("📄 PDF-Export")
-        logo_path = "logo.png"  # optional
+        logo_path = "logo.png"
         pdf_buffer = create_pdf_report(final_report, logo_path=logo_path)
         st.download_button("⬇️ PDF herunterladen", data=pdf_buffer, file_name="arztbrief.pdf", mime="application/pdf")
         st.download_button("⬇️ Arztbrief als Textdatei", final_report, file_name="arztbrief.txt")
