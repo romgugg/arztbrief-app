@@ -47,7 +47,7 @@ function startRecording() {
     document.getElementById("status").innerText = "🔴 Aufnahme läuft...";
     navigator.mediaDevices.getUserMedia({ audio: true })
         .then(stream => {
-            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
             audioChunks = [];
             mediaRecorder.ondataavailable = event => {
                 audioChunks.push(event.data);
@@ -94,7 +94,7 @@ if "audio_base64" not in st.session_state:
 if "transcription_done" not in st.session_state:
     st.session_state.transcription_done = False
 
-js_response = streamlit_js_eval(js_expressions=js_code, key="recorder", trigger=True)
+js_response = streamlit_js_eval(js_expressions=js_code, key="recorder", trigger=True, timeout=60000)
 
 if js_response and js_response != st.session_state.get("audio_base64"):
     st.session_state.audio_base64 = js_response
