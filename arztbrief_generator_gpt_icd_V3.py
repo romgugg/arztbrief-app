@@ -1,7 +1,7 @@
 
 import streamlit as st
 import whisper
-from openai import OpenAI
+from openai
 import tempfile
 import os
 import re
@@ -13,7 +13,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 from io import BytesIO
 
 # OpenAI Client
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 # === SYSTEMPROMPT ===
 SYSTEM_PROMPT = """Du bist ein medizinischer Assistent, der aus Transkripten von Arzt-Patienten-Gesprächen strukturierte Arztbriefe erstellt.
@@ -40,16 +40,15 @@ def transcribe_audio(file):
         tmp.write(file.read())
         tmp_path = tmp.name
 
-    audio_file = open(tmp_path, "rb")
-
-    transcript = openai.Audio.transcribe(
-        model="whisper-1",
-        file=audio_file,
-        language="de"
-    )
+    with open(tmp_path, "rb") as audio_file:
+        transcript = openai.Audio.transcribe(
+            model="whisper-1",
+            file=audio_file,
+            language="de"
+        )
 
     return transcript["text"]
-
+    
 def generate_report_with_gpt(transcript):
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
