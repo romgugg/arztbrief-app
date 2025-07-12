@@ -103,7 +103,7 @@ if js_response and js_response != st.session_state.get("audio_base64"):
 
 if st.session_state.get("audio_base64") and not st.session_state.get("transcription_done", False):
     with st.spinner("🔍 Transkription läuft..."):
-    st.success("📥 Audio wurde empfangen und wird transkribiert...")
+        st.success("📥 Audio wurde empfangen und wird transkribiert...")
     audio_bytes = base64.b64decode(st.session_state.audio_base64.split(",")[1])
     st.audio(audio_bytes, format="audio/webm")
 
