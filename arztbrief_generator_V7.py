@@ -117,12 +117,11 @@ if st.session_state.get("audio_base64") and not st.session_state.get("transcript
                 language="de"
             )
     except Exception as e:
-        from pydub import AudioSegment
-        import audioop
+        import subprocess
         import uuid
         st.warning("⚠️ Ursprüngliche Datei konnte nicht verarbeitet werden. Versuche WAV-Konvertierung...")
         wav_path = tmp_path.replace(".webm", f"_{uuid.uuid4().hex}.wav")
-        AudioSegment.from_file(tmp_path).export(wav_path, format="wav")
+        subprocess.run(["ffmpeg", "-y", "-i", tmp_path, wav_path], check=True)
         with open(wav_path, "rb") as audio_file:
             transcript = client.audio.transcriptions.create(
                 model="whisper-1",
@@ -157,11 +156,10 @@ if uploaded_file:
                 language="de"
             )
     except Exception as e:
-        from pydub import AudioSegment
+        import subprocess
         import uuid
         st.warning("⚠️ Die Datei konnte nicht direkt verarbeitet werden. Versuche WAV-Konvertierung...")
-        wav_path = tmp_path.replace(".webm", f"_{uuid.uuid4().hex}.wav")
-        AudioSegment.from_file(tmp_path).export(wav_path, format="wav")
+        subprocess.run(["ffmpeg", "-y", "-i", tmp_path, wav_path], check=True)
         with open(wav_path, "rb") as audio_file:
             transcript = client.audio.transcriptions.create(
                 model="whisper-1",
