@@ -62,13 +62,17 @@ function stopRecording() {
 """, height=200)
 
 # Listen to message from iframe
-js_response = streamlit_js_eval(js_expressions="await new Promise(resolve => {
+js_code = """
+await new Promise(resolve => {
   window.addEventListener('message', (event) => {
     if (event.data && event.data.base64) {
       resolve(event.data.base64);
     }
   }, { once: true });
-})", key="recorder")
+})
+"""
+
+js_response = streamlit_js_eval(js_expressions=js_code, key="recorder")
 
 if js_response:
     st.success("✅ Audio aufgenommen.")
