@@ -10,7 +10,8 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 from io import BytesIO
 
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+from openai import OpenAI
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 SYSTEM_PROMPT = """Du bist ein medizinischer Assistent, der aus Transkripten von Arzt-Patienten-Gesprächen strukturierte Arztbriefe erstellt.
 Gliedere den Brief in folgende Abschnitte:
@@ -33,11 +34,11 @@ def transcribe_audio(uploaded_file):
         tmp.write(uploaded_file.read())
         tmp_path = tmp.name
     with open(tmp_path, "rb") as f:
-        transcript = openai.Audio.transcribe(
-            model="whisper-1",
-            file=f,
-            language="de"
-        )
+        transcript = client.audio.transcriptions.create(
+    model="whisper-1",
+    file=f,
+    language="de"
+)
     os.remove(tmp_path)
     return transcript["text"]
 
