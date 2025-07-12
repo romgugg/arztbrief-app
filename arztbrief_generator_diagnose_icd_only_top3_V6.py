@@ -28,16 +28,22 @@ def load_icd10_mapping(filepath="icd10gm2025_codes.txt"):
     icd_map = {row["Beschreibung"].lower(): row["Code"] for _, row in df.iterrows()}
     return icd_map
 
-def transcribe_audio(file):
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-        tmp.write(file.read())
+def transcribe_audio(uploaded_file):
+    # Speichere hochgeladene Datei temporär
+    suffix = os.path.splitext(uploaded_file.name)[-1]
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(uploaded_file.read())
         tmp_path = tmp.name
-    with open(tmp_path, "rb") as audio_file:
+
+    # Öffne sie korrekt im Binärmodus
+    with open(tmp_path, "rb") as f:
         transcript = client.audio.transcriptions.create(
             model="whisper-1",
-            file=audio_file,
+            file=f,
             language="de"
         )
+
+    os.remove(tmp_path)
     return transcript.text
 
 def generate_report_with_gpt(transcript):
