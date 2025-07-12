@@ -3,8 +3,6 @@ import openai
 import tempfile
 import os
 import subprocess
-import pandas as pd
-from difflib import get_close_matches
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
@@ -22,12 +20,7 @@ Anamnese, Diagnose, Therapie, Aufklärung, Organisatorisches, Operationsplanung,
 Formuliere die Diagnosen möglichst ICD-10-nah, z. B. 'Essentielle Hypertonie' statt 'Bluthochdruck'.
 Verwende eine sachliche, medizinisch korrekte Ausdrucksweise. Vermute keine Inhalte, die nicht im Text vorkommen."""
 
-@st.cache_resource
-def load_icd10_mapping(filepath="icd10gm2025_codes.txt"):
-    df = pd.read_csv(filepath, sep="|", header=None, dtype=str)
-    df.columns = ["Stufe", "ID", "Ebene", "Code", "Leer1", "Leer2", "Leer3", "Beschreibung"]
-    df = df[["Code", "Beschreibung"]].dropna()
-    return {row["Beschreibung"].lower(): row["Code"] for _, row in df.iterrows()}
+# === Funktionen ===
 
 def transcribe_audio(uploaded_file):
     suffix = os.path.splitext(uploaded_file.name)[-1]
@@ -84,22 +77,6 @@ def extract_diagnose_section(report_text):
             diagnosis += line + " "
     return diagnosis.strip()
 
-def find_icd_codes_in_diagnose_section(report_text, icd_map, top_n=3, threshold=0.75):
-    diagnosis = extract_diagnose_section(report_text)
-    if not diagnosis:
-        return []
-
-    diagnosis_words = set(diagnosis.lower().split())
-    matches = []
-    for desc, code in icd_map.items():
-        desc_words = set(desc.lower().split())
-        if desc_words & diagnosis_words:
-            matches.append((desc.title(), code))
-        else:
-            if get_close_matches(desc.lower(), diagnosis_words, n=1, cutoff=threshold):
-                matches.append((desc.title(), code))
-    return matches[:top_n]
-
 def generate_icd_codes_with_gpt(diagnose_text):
     prompt = f"""
 Die folgende medizinische Diagnose lautet:
@@ -118,12 +95,11 @@ Bitte gib die drei zutreffendsten ICD-10-GM-Codes an. Format: „Bezeichnung →
     )
     return response.choices[0].message.content.strip()
 
-def insert_icds_into_diagnosis(report_text, icd_map):
+def insert_gpt_icds_into_diagnosis(report_text, gpt_icds_text):
     lines = report_text.splitlines()
     new_lines = []
     inside_diagnose = False
     inserted = False
-    top_icds = find_icd_codes_in_diagnose_section(report_text, icd_map)
 
     for line in lines:
         new_lines.append(line)
@@ -131,20 +107,20 @@ def insert_icds_into_diagnosis(report_text, icd_map):
             inside_diagnose = True
         elif inside_diagnose and line.strip() == "":
             inside_diagnose = False
-            if not inserted and top_icds:
-                new_lines.append("ICD-10-Codes:")
-                for term, code in top_icds:
-                    new_lines.append(f"- {term} → {code}")
+            if not inserted and gpt_icds_text:
+                new_lines.append("GPT-generierte ICD-10-Codes:")
+                for icd_line in gpt_icds_text.strip().splitlines():
+                    new_lines.append(f"- {icd_line.strip()}")
                 inserted = True
 
-    if not inserted and top_icds:
-        new_lines.append("\nICD-10-Codes:")
-        for term, code in top_icds:
-            new_lines.append(f"- {term} → {code}")
+    if not inserted and gpt_icds_text:
+        new_lines.append("\nGPT-generierte ICD-10-Codes:")
+        for icd_line in gpt_icds_text.strip().splitlines():
+            new_lines.append(f"- {icd_line.strip()}")
 
-    return "\n".join(new_lines), top_icds
+    return "\n".join(new_lines)
 
-def create_pdf_report(brief_text, gpt_icds_text=None, logo_path=None):
+def create_pdf_report(brief_text, logo_path=None):
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=50, bottomMargin=50)
     styles = getSampleStyleSheet()
@@ -166,24 +142,15 @@ def create_pdf_report(brief_text, gpt_icds_text=None, logo_path=None):
             elements.append(Paragraph(content.strip().replace("\n", "<br/>"), styles["BodyText"]))
             elements.append(Spacer(1, 12))
 
-    if gpt_icds_text:
-        elements.append(Spacer(1, 12))
-        elements.append(Paragraph("<b>GPT-generierte ICD-10-Codes:</b>", styles["Heading4"]))
-        for line in gpt_icds_text.splitlines():
-            elements.append(Paragraph(line.strip(), styles["BodyText"]))
-
     doc.build(elements)
     buffer.seek(0)
     return buffer
 
-
 # === Streamlit UI ===
+
 st.set_page_config(page_title="Arztbrief aus Audio", layout="centered")
 st.title("🎤 Arztbrief aus Audioaufnahme")
 st.markdown("Lade ein Arzt-Patienten-Gespräch hoch (mp3/wav/m4a). Der strukturierte Arztbrief wird automatisch erstellt.")
-
-with st.spinner("📚 Lade ICD-10-Daten…"):
-    icd_map = load_icd10_mapping()
 
 audio_file = st.file_uploader("📁 Audioaufnahme hochladen", type=["mp3", "wav", "m4a"])
 
@@ -201,28 +168,18 @@ if audio_file:
     if st.button("🧠 Arztbrief generieren mit GPT"):
         with st.spinner("💬 GPT analysiert das Gespräch…"):
             report = generate_report_with_gpt(transkript)
+            diagnose_text = extract_diagnose_section(report)
+            gpt_icds = generate_icd_codes_with_gpt(diagnose_text)
+            final_report = insert_gpt_icds_into_diagnosis(report, gpt_icds)
 
-            diagnose_section = extract_diagnose_section(report)
-            icd_mapped = find_icd_codes_in_diagnose_section(report, icd_map)
-            report_with_icd, _ = insert_icds_into_diagnosis(report, icd_map)
-
-            gpt_icds = generate_icd_codes_with_gpt(diagnose_section)
-
-        st.subheader("📄 Generierter Arztbrief")
-        st.text_area("Arztbrief mit ICD-10 (klassisch)", report_with_icd, height=400)
-
-        st.subheader("📘 Klassisch erkannte ICD-10-Codes")
-        if icd_mapped:
-            for term, code in icd_mapped:
-                st.markdown(f"- **{term}** → `{code}`")
-        else:
-            st.info("Keine ICD-Codes über Mapping erkannt.")
+        st.subheader("📄 Arztbrief (mit GPT-ICDs)")
+        st.text_area("Strukturierter Arztbrief", final_report, height=400)
 
         st.subheader("🧠 GPT-generierte ICD-10-Codes")
         st.text(gpt_icds)
 
         st.subheader("📄 PDF-Export")
-        logo_path = "logo.png"
-        pdf_buffer = create_pdf_report(report_with_icd, gpt_icds_text=gpt_icds, logo_path=logo_path)
+        logo_path = "logo.png"  # optional
+        pdf_buffer = create_pdf_report(final_report, logo_path=logo_path)
         st.download_button("⬇️ PDF herunterladen", data=pdf_buffer, file_name="arztbrief.pdf", mime="application/pdf")
-        st.download_button("⬇️ Arztbrief als Textdatei", report_with_icd, file_name="arztbrief.txt")
+        st.download_button("⬇️ Arztbrief als Textdatei", final_report, file_name="arztbrief.txt")
