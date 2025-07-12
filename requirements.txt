@@ -4,3 +4,4 @@ pandas
 pydub
 reportlab
 ffmpeg-python
+streamlit_js_eval
