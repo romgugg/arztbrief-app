@@ -1,6 +1,6 @@
 
 import streamlit as st
-import openai
+from openai import OpenAI
 import tempfile
 import os
 import pandas as pd
@@ -10,8 +10,8 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 from io import BytesIO
 
-# OpenAI API-Key setzen
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+# OpenAI Client
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 SYSTEM_PROMPT = """Du bist ein medizinischer Assistent, der aus Transkripten von Arzt-Patienten-Gesprächen strukturierte Arztbriefe erstellt.
 Gliedere den Brief in folgende Abschnitte:
@@ -33,21 +33,21 @@ def transcribe_audio(file):
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(file.read())
         tmp_path = tmp.name
-    with open(tmp_path, "rb") as audio_file:
-        transcript = openai.Audio.transcribe(
+    with open(tmp_path, "rb") as f:
+        transcript = client.audio.transcriptions.create(
             model="whisper-1",
-            file=audio_file,
+            file=f,
             language="de"
         )
     os.remove(tmp_path)
-    return transcript["text"]
+    return transcript.text
 
 def generate_report_with_gpt(transcript):
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": f"Hier ist das Gespräch:\n{transcript}"}
     ]
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-4o",
         messages=messages,
         temperature=0.3
@@ -183,12 +183,6 @@ if audio_file:
                 st.info(msg)
             else:
                 st.success(msg)
-
-        st.subheader("📘 Verwendete ICD-10-Codes")
-        diagnose_text = extract_diagnose_section(report)
-        top_codes = find_icd_codes_in_text(diagnose_text, icd_map)
-        for term, code in top_codes:
-            st.markdown(f"- **{term}** → `{code}`")
 
         st.subheader("📄 PDF-Export")
         logo_path = "logo.png"
