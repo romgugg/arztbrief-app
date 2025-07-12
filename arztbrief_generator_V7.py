@@ -96,12 +96,13 @@ if "transcription_done" not in st.session_state:
 
 js_response = streamlit_js_eval(js_expressions=js_code, key="recorder", trigger=True)
 
-if js_response and js_response != st.session_state.audio_base64:
-    st.success("📥 Audio wurde empfangen und gespeichert.")
+if js_response and js_response != st.session_state.get("audio_base64") and not st.session_state.get("transcription_done", False):
     st.session_state.audio_base64 = js_response
-    st.session_state.transcription_done = False
+    st.rerun()
 
-    audio_bytes = base64.b64decode(js_response.split(",")[1])
+if st.session_state.get("audio_base64") and not st.session_state.get("transcription_done", False):
+    st.success("📥 Audio wurde empfangen und wird transkribiert...")
+    audio_bytes = base64.b64decode(st.session_state.audio_base64.split(",")[1])
     st.audio(audio_bytes, format="audio/webm")
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
@@ -132,7 +133,7 @@ if js_response and js_response != st.session_state.audio_base64:
 
     st.session_state.transcription_text = transcript.text
     st.session_state.transcription_done = True
-    st.write("📝 Transkriptionstext (Ausschnitt):", st.session_state.transcription_text[:300])
+    st.write("📝 Transkriptionstext (Ausschnitt):", transcript.text[:300])
 
 st.divider()
 
