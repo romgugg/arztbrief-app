@@ -118,6 +118,7 @@ if st.session_state.get("audio_base64") and not st.session_state.get("transcript
             )
     except Exception as e:
         from pydub import AudioSegment
+import audioop
         import uuid
         st.warning("⚠️ Ursprüngliche Datei konnte nicht verarbeitet werden. Versuche WAV-Konvertierung...")
         wav_path = tmp_path.replace(".webm", f"_{uuid.uuid4().hex}.wav")
