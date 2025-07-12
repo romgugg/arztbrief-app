@@ -72,64 +72,77 @@ await new Promise(resolve => {
 })
 """
 
-js_response = streamlit_js_eval(js_expressions=js_code, key="recorder")
+if "audio_base64" not in st.session_state:
+    st.session_state.audio_base64 = None
+if "transcription_done" not in st.session_state:
+    st.session_state.transcription_done = False
 
+js_response = streamlit_js_eval(js_expressions=js_code, key="recorder")
 if js_response:
+    st.session_state.audio_base64 = js_response
+    st.session_state.transcription_done = False
+
+if st.session_state.audio_base64:
     st.success("✅ Audio aufgenommen.")
-    audio_bytes = base64.b64decode(js_response.split(",")[1])
+    audio_bytes = base64.b64decode(st.session_state.audio_base64.split(",")[1])
     st.audio(audio_bytes, format="audio/webm")
 
-    if st.button("🧠 Transkription starten"):
-        with st.spinner("🧠 Transkription läuft..."):
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as f:
-                f.write(audio_bytes)
-                f.flush()
-                with open(f.name, "rb") as audio_file:
-                    transcript = client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_file,
-                        language="de"
-                    )
-            os.remove(f.name)
-            st.subheader("📝 Transkript")
-            st.text_area("Transkribierter Text", transcript.text, height=250)
+    if not st.session_state.transcription_done:
+        if st.button("🧠 Transkription starten"):
+            with st.spinner("🧠 Transkription läuft..."):
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as f:
+                    f.write(audio_bytes)
+                    f.flush()
+                    with open(f.name, "rb") as audio_file:
+                        transcript = client.audio.transcriptions.create(
+                            model="whisper-1",
+                            file=audio_file,
+                            language="de"
+                        )
+                os.remove(f.name)
+                st.session_state.transcription_text = transcript.text
+                st.session_state.transcription_done = True
 
-            if st.button("🧠 Arztbrief generieren mit GPT"):
-                with st.spinner("💬 GPT erstellt den Arztbrief..."):
-                    system_prompt = """
-                    Du bist ein medizinischer Assistent, der aus Transkripten strukturierte Arztbriefe erstellt.
-                    Gliedere in: Anamnese, Diagnose, Therapie, Aufklärung, Organisatorisches, Operationsplanung, Patientenwunsch.
-                    Füge drei passende ICD-10-Codes unter Diagnose hinzu (Format: Bezeichnung → Code).
-                    """
-                    chat = client.chat.completions.create(
-                        model="gpt-4o",
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": transcript.text}
-                        ],
-                        temperature=0.3
-                    )
-                    report = chat.choices[0].message.content.strip()
+    if st.session_state.transcription_done:
+        st.subheader("📝 Transkript")
+        st.text_area("Transkribierter Text", st.session_state.transcription_text, height=250)
 
-                st.subheader("📄 Arztbrief")
-                st.text_area("Arztbrief mit ICD-10-Codes", report, height=400)
+        if st.button("🧠 Arztbrief generieren mit GPT"):
+            with st.spinner("💬 GPT erstellt den Arztbrief..."):
+                system_prompt = """
+                Du bist ein medizinischer Assistent, der aus Transkripten strukturierte Arztbriefe erstellt.
+                Gliedere in: Anamnese, Diagnose, Therapie, Aufklärung, Organisatorisches, Operationsplanung, Patientenwunsch.
+                Füge drei passende ICD-10-Codes unter Diagnose hinzu (Format: Bezeichnung → Code).
+                """
+                chat = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": st.session_state.transcription_text}
+                    ],
+                    temperature=0.3
+                )
+                report = chat.choices[0].message.content.strip()
 
-                def create_pdf_report(brief_text):
-                    buffer = BytesIO()
-                    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=50, bottomMargin=50)
-                    styles = getSampleStyleSheet()
-                    elements = []
-                    for section in brief_text.split("\n\n"):
-                        lines = section.strip().split("\n", 1)
-                        if len(lines) == 2:
-                            heading, content = lines
-                            elements.append(Paragraph(f"<b>{heading}:</b>", styles["Heading4"]))
-                            elements.append(Paragraph(content.strip().replace("\n", "<br/>"), styles["BodyText"]))
-                            elements.append(Spacer(1, 12))
-                    doc.build(elements)
-                    buffer.seek(0)
-                    return buffer
+            st.subheader("📄 Arztbrief")
+            st.text_area("Arztbrief mit ICD-10-Codes", report, height=400)
 
-                pdf_buffer = create_pdf_report(report)
-                st.download_button("⬇️ PDF herunterladen", data=pdf_buffer, file_name="arztbrief.pdf", mime="application/pdf")
-                st.download_button("⬇️ Arztbrief als Textdatei", report, file_name="arztbrief.txt")
+            def create_pdf_report(brief_text):
+                buffer = BytesIO()
+                doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=50, bottomMargin=50)
+                styles = getSampleStyleSheet()
+                elements = []
+                for section in brief_text.split("\n\n"):
+                    lines = section.strip().split("\n", 1)
+                    if len(lines) == 2:
+                        heading, content = lines
+                        elements.append(Paragraph(f"<b>{heading}:</b>", styles["Heading4"]))
+                        elements.append(Paragraph(content.strip().replace("\n", "<br/>"), styles["BodyText"]))
+                        elements.append(Spacer(1, 12))
+                doc.build(elements)
+                buffer.seek(0)
+                return buffer
+
+            pdf_buffer = create_pdf_report(report)
+            st.download_button("⬇️ PDF herunterladen", data=pdf_buffer, file_name="arztbrief.pdf", mime="application/pdf")
+            st.download_button("⬇️ Arztbrief als Textdatei", report, file_name="arztbrief.txt")
