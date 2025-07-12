@@ -39,10 +39,16 @@ def transcribe_audio(file):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
         tmp.write(file.read())
         tmp_path = tmp.name
-    model = load_model()
-    result = model.transcribe(tmp_path, language="de")
-    os.remove(tmp_path)
-    return result["text"]
+
+    audio_file = open(tmp_path, "rb")
+
+    transcript = openai.Audio.transcribe(
+        model="whisper-1",
+        file=audio_file,
+        language="de"
+    )
+
+    return transcript["text"]
 
 def generate_report_with_gpt(transcript):
     messages = [
