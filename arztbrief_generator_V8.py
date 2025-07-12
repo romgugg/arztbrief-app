@@ -59,7 +59,7 @@ function startRecording() {
                 reader.readAsDataURL(blob);
                 reader.onloadend = () => {
                     const base64data = reader.result;
-                    resolve(base64data);
+                    window.parent.postMessage({ type: 'FROM_IFRAME', base64: base64data }, '*');
                 };
             };
             mediaRecorder.start();
@@ -81,26 +81,13 @@ function stopRecording() {
 # JS listener
 js_code = """
 await new Promise(resolve => {
-  const waitForBlob = () => {
-    let recorder;
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-      recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      const chunks = [];
-      recorder.ondataavailable = e => chunks.push(e.data);
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        const reader = new FileReader();
-        reader.readAsDataURL(blob);
-        reader.onloadend = () => resolve(reader.result);
-      };
-      recorder.start();
-      setTimeout(() => recorder.stop(), 5000); // fallback stop
-    });
-  };
-  waitForBlob();
+  window.addEventListener('message', (event) => {
+    if (event.data && event.data.base64) {
+      resolve(event.data.base64);
+    }
+  }, { once: true });
 })
 """
-
 if "audio_base64" not in st.session_state:
     st.session_state.audio_base64 = None
 if "transcription_done" not in st.session_state:
