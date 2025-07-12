@@ -19,6 +19,8 @@ Gliedere den Brief in folgende Abschnitte:
 
 Anamnese, Diagnose, Therapie, Aufklärung, Organisatorisches, Operationsplanung, Patientenwunsch.
 
+Formuliere die **Diagnosen präzise und ICD-10-nah**, z. B. „Essentielle Hypertonie“, „Typ-2-Diabetes“, „Chronische Rückenschmerzen“.
+
 Verwende eine sachliche, medizinisch korrekte Ausdrucksweise. Vermute keine Inhalte, die nicht im Text vorkommen."""
 
 @st.cache_resource
