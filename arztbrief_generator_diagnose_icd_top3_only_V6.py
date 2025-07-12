@@ -40,7 +40,7 @@ def transcribe_audio(uploaded_file):
     language="de"
 )
     os.remove(tmp_path)
-    return transcript["text"]
+    return transcript.text
 
 def generate_report_with_gpt(transcript):
     messages = [
