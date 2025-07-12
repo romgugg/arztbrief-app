@@ -42,19 +42,19 @@ def transcribe_audio(uploaded_file):
     os.remove(tmp_path)
     return transcript.text
 
-def generate_report_with_gpt(transcript):
+def generate_report_with_gpt(transkript):
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": f"""Hier ist das Gespräch:
-{transcript}"""}
+{transkript}"""}
     ]
 
     response = client.chat.completions.create(
-    model="gpt-4o",
-    messages=messages,
-    temperature=0.3
-)
-return response.choices[0].message.content
+        model="gpt-4o",
+        messages=messages,
+        temperature=0.3
+    )
+    return response.choices[0].message.content
 
 def find_icd_codes_in_diagnose_section(report_text, icd_map, top_n=3, threshold=0.85):
     diagnosis = ""
