@@ -30,26 +30,41 @@ def load_icd10_mapping(filepath="icd10gm2025_codes.txt"):
     return icd_map
 
 # ✅ Audioverarbeitung verbessert: Robust für .m4a, .mp3, .wav
+import subprocess
+import tempfile
+
 def transcribe_audio(uploaded_file):
+    # Speichere Originaldatei (z. B. .m4a, .mp3) temporär
+    suffix = os.path.splitext(uploaded_file.name)[-1]
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as in_file:
+        in_file.write(uploaded_file.read())
+        in_path = in_file.name
+
+    # Konvertiere zu WAV mit ffmpeg
+    out_path = in_path.replace(suffix, ".wav")
     try:
-        # Lade Audio aus Upload
-        audio = AudioSegment.from_file(uploaded_file)
+        subprocess.run(
+            ["ffmpeg", "-i", in_path, "-ar", "16000", "-ac", "1", "-f", "wav", out_path],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+    except subprocess.CalledProcessError:
+        raise RuntimeError("❌ Fehler bei der Audio-Konvertierung mit ffmpeg.")
 
-        # Exportiere als temporäre .wav-Datei
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_wav:
-            audio.export(tmp_wav.name, format="wav")
-            tmp_wav_path = tmp_wav.name
+    # Sende WAV-Datei an Whisper
+    with open(out_path, "rb") as f:
+        transcript = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=f,
+            language="de"
+        )
 
-        # Sende an Whisper
-        with open(tmp_wav_path, "rb") as f:
-            transcript = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=f,
-                language="de"
-            )
+    # Aufräumen
+    os.remove(in_path)
+    os.remove(out_path)
 
-        os.remove(tmp_wav_path)
-        return transcript.text
+    return transcript.text
 
     except Exception as e:
         raise RuntimeError(f"Fehler bei der Audioverarbeitung: {e}")
