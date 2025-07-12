@@ -142,16 +142,32 @@ uploaded_file = st.file_uploader("📁 Oder lade eine Audiodatei hoch (MP3, WAV,
 if uploaded_file:
     st.success("📥 Datei erfolgreich hochgeladen.")
     st.session_state.transcription_done = False
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
         tmp.write(uploaded_file.read())
         tmp_path = tmp.name
 
-    with open(tmp_path, "rb") as audio_file:
-        transcript = client.audio.transcriptions.create(
-            model="whisper-1",
-            file=audio_file,
-            language="de"
-        )
+    try:
+        with open(tmp_path, "rb") as audio_file:
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+                language="de"
+            )
+    except Exception as e:
+        from pydub import AudioSegment
+        import uuid
+        st.warning("⚠️ Die Datei konnte nicht direkt verarbeitet werden. Versuche WAV-Konvertierung...")
+        wav_path = tmp_path.replace(".webm", f"_{uuid.uuid4().hex}.wav")
+        AudioSegment.from_file(tmp_path).export(wav_path, format="wav")
+        with open(wav_path, "rb") as audio_file:
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+                language="de"
+            )
+        os.remove(wav_path)
+
     os.remove(tmp_path)
     st.session_state.audio_base64 = None
     st.session_state.transcription_text = transcript.text
