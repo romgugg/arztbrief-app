@@ -154,7 +154,7 @@ if uploaded_file:
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=50, bottomMargin=50)
     styles = getSampleStyleSheet()
     elements = []
-    for section in brief_text.split("
+    for section in brief_text.split("\\n\\n"):
 
 "):
         lines = section.strip().split("
