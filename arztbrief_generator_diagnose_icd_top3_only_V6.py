@@ -78,9 +78,10 @@ if "transcription_done" not in st.session_state:
     st.session_state.transcription_done = False
 
 js_response = streamlit_js_eval(js_expressions=js_code, key="recorder")
-if js_response:
+if js_response and not st.session_state.audio_base64:
     st.session_state.audio_base64 = js_response
     st.session_state.transcription_done = False
+    st.experimental_rerun()
 
 if st.session_state.audio_base64:
     st.success("✅ Audio aufgenommen.")
