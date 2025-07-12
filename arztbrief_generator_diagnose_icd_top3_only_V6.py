@@ -10,7 +10,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 from io import BytesIO
 
-# OpenAI-Client (API-Key aus Streamlit Secrets)
+# OpenAI-Client mit Secret-Key
 from openai import OpenAI
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
@@ -26,10 +26,8 @@ def load_icd10_mapping(filepath="icd10gm2025_codes.txt"):
     df = pd.read_csv(filepath, sep="|", header=None, dtype=str)
     df.columns = ["Stufe", "ID", "Ebene", "Code", "Leer1", "Leer2", "Leer3", "Beschreibung"]
     df = df[["Code", "Beschreibung"]].dropna()
-    icd_map = {row["Beschreibung"].lower(): row["Code"] for _, row in df.iterrows()}
-    return icd_map
+    return {row["Beschreibung"].lower(): row["Code"] for _, row in df.iterrows()}
 
-# ✅ ffmpeg-basierte Audioverarbeitung (robust für m4a/mp3/wav)
 def transcribe_audio(uploaded_file):
     suffix = os.path.splitext(uploaded_file.name)[-1]
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as in_file:
@@ -37,7 +35,6 @@ def transcribe_audio(uploaded_file):
         in_path = in_file.name
 
     out_path = in_path.replace(suffix, ".wav")
-
     try:
         subprocess.run(
             ["ffmpeg", "-i", in_path, "-ar", "16000", "-ac", "1", "-f", "wav", out_path],
@@ -58,18 +55,14 @@ def transcribe_audio(uploaded_file):
         raise RuntimeError(f"❌ Fehler bei Audio-Konvertierung oder Transkription: {e}")
 
     finally:
-        if os.path.exists(in_path):
-            os.remove(in_path)
-        if os.path.exists(out_path):
-            os.remove(out_path)
+        if os.path.exists(in_path): os.remove(in_path)
+        if os.path.exists(out_path): os.remove(out_path)
 
 def generate_report_with_gpt(transkript):
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": f"""Hier ist das Gespräch:
-{transkript}"""}
+        {"role": "user", "content": f"Hier ist das Gespräch:\n{transkript}"}
     ]
-
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=messages,
@@ -77,17 +70,21 @@ def generate_report_with_gpt(transkript):
     )
     return response.choices[0].message.content
 
-def find_icd_codes_in_diagnose_section(report_text, icd_map, top_n=3, threshold=0.85):
+def find_icd_codes_in_diagnose_section(report_text, icd_map, top_n=3, threshold=0.75):
     diagnosis = ""
     capture = False
     for line in report_text.splitlines():
-        if line.strip().lower().startswith("diagnose"):
+        if "diagnose" in line.strip().lower():
             capture = True
             continue
         if capture:
             if line.strip() == "":
                 break
             diagnosis += line + " "
+
+    if not diagnosis.strip():
+        return []
+
     diagnosis_words = set(diagnosis.lower().split())
     matches = []
     for desc, code in icd_map.items():
@@ -106,9 +103,9 @@ def insert_icds_into_diagnosis(report_text, icd_map):
     inserted = False
     top_icds = find_icd_codes_in_diagnose_section(report_text, icd_map)
 
-    for line in lines:
+    for i, line in enumerate(lines):
         new_lines.append(line)
-        if line.strip().lower().startswith("diagnose"):
+        if "diagnose" in line.strip().lower():
             inside_diagnose = True
         elif inside_diagnose and line.strip() == "":
             inside_diagnose = False
@@ -117,7 +114,13 @@ def insert_icds_into_diagnosis(report_text, icd_map):
                 for term, code in top_icds:
                     new_lines.append(f"- {term} → {code}")
                 inserted = True
-    return "\n".join(new_lines)
+
+    if not inserted and top_icds:
+        new_lines.append("\nICD-10-Codes:")
+        for term, code in top_icds:
+            new_lines.append(f"- {term} → {code}")
+
+    return "\n".join(new_lines), top_icds
 
 def create_pdf_report(brief_text, logo_path=None):
     buffer = BytesIO()
@@ -148,7 +151,6 @@ def create_pdf_report(brief_text, logo_path=None):
 # === Streamlit UI ===
 st.set_page_config(page_title="Arztbrief aus Audio", layout="centered")
 st.title("🎤 Arztbrief aus Audioaufnahme")
-
 st.markdown("Lade ein Arzt-Patienten-Gespräch hoch (mp3/wav/m4a). Der strukturierte Arztbrief wird automatisch erstellt.")
 
 with st.spinner("📚 Lade ICD-10-Daten…"):
@@ -170,10 +172,17 @@ if audio_file:
     if st.button("🧠 Arztbrief generieren mit GPT"):
         with st.spinner("💬 GPT analysiert das Gespräch…"):
             report = generate_report_with_gpt(transkript)
-            report_with_icd = insert_icds_into_diagnosis(report, icd_map)
+            report_with_icd, top_icds = insert_icds_into_diagnosis(report, icd_map)
 
         st.subheader("📄 Generierter Arztbrief")
         st.text_area("Arztbrief mit ICD-10", report_with_icd, height=400)
+
+        st.subheader("🔍 Erkannte ICD-10-Codes aus der Diagnose")
+        if top_icds:
+            for term, code in top_icds:
+                st.markdown(f"- **{term}** → `{code}`")
+        else:
+            st.info("Keine passenden ICD-Codes zur Diagnose gefunden.")
 
         st.subheader("📄 PDF-Export")
         logo_path = "logo.png"
