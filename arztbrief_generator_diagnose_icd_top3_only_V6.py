@@ -11,16 +11,18 @@ from io import BytesIO
 
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-st.set_page_config(page_title="🎤 Arztbrief aus Audioaufnahme", layout="centered")
+st.set_page_config(page_title="🎤 Arztbrief aus Audio", layout="centered")
 st.title("🎤 Arztbrief aus Browser-Aufnahme")
-st.markdown("🎙️ Nimm ein Arzt-Patienten-Gespräch direkt im Browser auf. Ein strukturierter Arztbrief wird automatisch erstellt.")
+st.markdown("🎙️ Nimm ein Arzt-Patienten-Gespräch direkt im Browser auf und generiere automatisch einen strukturierten Arztbrief.")
 
-# === HTML + JS Recorder ===
+# === Aufnahme-Steuerung mit Statusanzeige ===
 components.html("""
 <script>
 let mediaRecorder;
 let audioChunks = [];
+
 function startRecording() {
+    document.getElementById("recordingStatus").innerText = "🔴 Aufnahme läuft...";
     navigator.mediaDevices.getUserMedia({ audio: true })
         .then(stream => {
             mediaRecorder = new MediaRecorder(stream);
@@ -29,27 +31,35 @@ function startRecording() {
                 audioChunks.push(event.data);
             };
             mediaRecorder.onstop = () => {
+                document.getElementById("recordingStatus").innerText = "✅ Aufnahme abgeschlossen.";
                 const blob = new Blob(audioChunks, { type: 'audio/webm' });
                 const reader = new FileReader();
                 reader.readAsDataURL(blob);
                 reader.onloadend = () => {
                     const base64data = reader.result.split(',')[1];
-                    const streamlitMsg = {"isStreamlitMessage":true,"type":"streamlit:setComponentValue","value":base64data};
-                    window.parent.postMessage(streamlitMsg, "*");
+                    const msg = {"isStreamlitMessage":true,"type":"streamlit:setComponentValue","value":base64data};
+                    window.parent.postMessage(msg, "*");
                 };
             };
             mediaRecorder.start();
         });
 }
+
 function stopRecording() {
-    mediaRecorder.stop();
+    if (mediaRecorder && mediaRecorder.state === "recording") {
+        mediaRecorder.stop();
+    }
 }
 </script>
-<button onclick="startRecording()">🎙️ Aufnahme starten</button>
-<button onclick="stopRecording()">⏹️ Aufnahme stoppen</button>
-""", height=150)
 
-# Use new API for query params (post-message workaround)
+<div>
+  <button onclick="startRecording()">🎙️ Aufnahme starten</button>
+  <button onclick="stopRecording()">⏹️ Aufnahme stoppen</button>
+  <p id="recordingStatus" style="font-weight:bold; color:darkred; font-size:16px;"></p>
+</div>
+""", height=180)
+
+# === Audiodaten empfangen ===
 audio_base64 = st.query_params.get("value")
 
 def transcribe_webm_bytes(audio_bytes):
@@ -70,8 +80,7 @@ Gliedere den Brief in folgende Abschnitte:
 
 Anamnese, Diagnose, Therapie, Aufklärung, Organisatorisches, Operationsplanung, Patientenwunsch.
 
-Formuliere die Diagnosen möglichst ICD-10-nah, z. B. 'Essentielle Hypertonie' statt 'Bluthochdruck'.
-Verwende eine sachliche, medizinisch korrekte Ausdrucksweise. Vermute keine Inhalte, die nicht im Text vorkommen."""
+Formuliere die Diagnosen möglichst ICD-10-nah. Verwende eine sachliche, medizinisch korrekte Ausdrucksweise."""
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": f"Hier ist das Gespräch:\n{transkript}"}
@@ -90,9 +99,9 @@ def extract_diagnose_section(report_text):
         if "diagnose" in line.strip().lower():
             capture = True
             continue
+        if capture and line.strip() == "":
+            break
         if capture:
-            if line.strip() == "":
-                break
             diagnosis += line + " "
     return diagnosis.strip()
 
@@ -165,7 +174,7 @@ def create_pdf_report(brief_text, logo_path=None):
     buffer.seek(0)
     return buffer
 
-# === Verarbeitung nach Aufnahme ===
+# === Nach der Aufnahme ===
 if audio_base64:
     st.success("🎧 Aufnahme erfolgreich übertragen.")
     audio_bytes = base64.b64decode(audio_base64[0])
@@ -183,10 +192,10 @@ if audio_base64:
             gpt_icds = generate_icd_codes_with_gpt(diagnose_text)
             final_report = insert_gpt_icds_into_diagnosis(report, gpt_icds)
 
-        st.subheader("📄 Arztbrief (mit GPT-ICDs)")
+        st.subheader("📄 Arztbrief mit GPT-ICDs")
         st.text_area("Strukturierter Arztbrief", final_report, height=400)
 
-        st.subheader("🧠 GPT-generierte ICD-10-Codes")
+        st.subheader("📎 GPT-generierte ICD-10-Codes")
         st.text(gpt_icds)
 
         st.subheader("📄 PDF-Export")
