@@ -81,6 +81,7 @@ js_response = streamlit_js_eval(js_expressions=js_code, key="recorder")
 if js_response and not st.session_state.audio_base64:
     st.session_state.audio_base64 = js_response
     st.session_state.transcription_done = False
+    st.experimental_rerun()
 
 audio_ready = st.session_state.audio_base64 is not None
 transcribe_disabled = not audio_ready
@@ -101,6 +102,7 @@ if audio_ready:
 
 if transcribe_button_clicked and not st.session_state.transcription_done:
     with st.spinner("🧠 Transkription läuft..."):
+        audio_bytes = base64.b64decode(st.session_state.audio_base64.split(",")[1])
         with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as f:
             f.write(audio_bytes)
             f.flush()
