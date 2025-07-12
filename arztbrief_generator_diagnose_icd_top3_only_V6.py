@@ -42,14 +42,12 @@ def transcribe_audio(uploaded_file):
     return transcript["text"]
 
 def generate_report_with_gpt(transcript):
-   messages = [
-    {"role": "system", "content": SYSTEM_PROMPT},
-    {
-        "role": "user",
-        "content": f"""Hier ist das Gespräch:
-{transcript}"""
-    }
-]
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": f"""Hier ist das Gespräch:
+{transcript}"""}
+    ]
+
     response = openai.ChatCompletion.create(
         model="gpt-4o",
         messages=messages,
