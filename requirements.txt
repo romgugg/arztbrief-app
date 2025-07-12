@@ -1,4 +1,6 @@
 streamlit
 openai
 pandas
+pydub
 reportlab
+ffmpeg-python
