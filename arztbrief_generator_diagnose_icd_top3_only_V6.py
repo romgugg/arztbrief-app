@@ -2,15 +2,15 @@ import streamlit as st
 import openai
 import tempfile
 import os
+import subprocess
 import pandas as pd
 from difflib import get_close_matches
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 from io import BytesIO
-from pydub import AudioSegment
 
-# OpenAI-Client mit API-Key aus st.secrets
+# OpenAI-Client (API-Key aus Streamlit Secrets)
 from openai import OpenAI
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
@@ -29,19 +29,15 @@ def load_icd10_mapping(filepath="icd10gm2025_codes.txt"):
     icd_map = {row["Beschreibung"].lower(): row["Code"] for _, row in df.iterrows()}
     return icd_map
 
-# ✅ Audioverarbeitung verbessert: Robust für .m4a, .mp3, .wav
-import subprocess
-import tempfile
-
+# ✅ ffmpeg-basierte Audioverarbeitung (robust für m4a/mp3/wav)
 def transcribe_audio(uploaded_file):
-    # Speichere Originaldatei (z. B. .m4a, .mp3) temporär
     suffix = os.path.splitext(uploaded_file.name)[-1]
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as in_file:
         in_file.write(uploaded_file.read())
         in_path = in_file.name
 
-    # Konvertiere zu WAV mit ffmpeg
     out_path = in_path.replace(suffix, ".wav")
+
     try:
         subprocess.run(
             ["ffmpeg", "-i", in_path, "-ar", "16000", "-ac", "1", "-f", "wav", out_path],
@@ -49,25 +45,23 @@ def transcribe_audio(uploaded_file):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
-    except subprocess.CalledProcessError:
-        raise RuntimeError("❌ Fehler bei der Audio-Konvertierung mit ffmpeg.")
 
-    # Sende WAV-Datei an Whisper
-    with open(out_path, "rb") as f:
-        transcript = client.audio.transcriptions.create(
-            model="whisper-1",
-            file=f,
-            language="de"
-        )
-
-    # Aufräumen
-    os.remove(in_path)
-    os.remove(out_path)
-
-    return transcript.text
+        with open(out_path, "rb") as f:
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=f,
+                language="de"
+            )
+        return transcript.text
 
     except Exception as e:
-        raise RuntimeError(f"Fehler bei der Audioverarbeitung: {e}")
+        raise RuntimeError(f"❌ Fehler bei Audio-Konvertierung oder Transkription: {e}")
+
+    finally:
+        if os.path.exists(in_path):
+            os.remove(in_path)
+        if os.path.exists(out_path):
+            os.remove(out_path)
 
 def generate_report_with_gpt(transkript):
     messages = [
