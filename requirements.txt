@@ -1,7 +1,4 @@
 streamlit
 openai
-whisper
 pandas
 reportlab
-torch
-torchaudio
