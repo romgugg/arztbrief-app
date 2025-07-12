@@ -11,10 +11,9 @@ from io import BytesIO
 
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-st.set_page_config(page_title="🎤 Arztbrief aus Browser-Aufnahme", layout="centered")
-st.title("🎤 Arztbrief aus Audioaufnahme (Browser)")
-
-st.markdown("🎙️ Nimm ein Arzt-Patienten-Gespräch direkt im Browser auf und erhalte automatisch einen strukturierten Arztbrief.")
+st.set_page_config(page_title="🎤 Arztbrief aus Audioaufnahme", layout="centered")
+st.title("🎤 Arztbrief aus Browser-Aufnahme")
+st.markdown("🎙️ Nimm ein Arzt-Patienten-Gespräch direkt im Browser auf. Ein strukturierter Arztbrief wird automatisch erstellt.")
 
 # === HTML + JS Recorder ===
 components.html("""
@@ -50,8 +49,8 @@ function stopRecording() {
 <button onclick="stopRecording()">⏹️ Aufnahme stoppen</button>
 """, height=150)
 
-# Empfange Aufnahme
-audio_base64 = st.experimental_get_query_params().get("value")
+# Use new API for query params (post-message workaround)
+audio_base64 = st.query_params.get("value")
 
 def transcribe_webm_bytes(audio_bytes):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as f:
@@ -166,7 +165,7 @@ def create_pdf_report(brief_text, logo_path=None):
     buffer.seek(0)
     return buffer
 
-# === Auswertung nach Aufnahme ===
+# === Verarbeitung nach Aufnahme ===
 if audio_base64:
     st.success("🎧 Aufnahme erfolgreich übertragen.")
     audio_bytes = base64.b64decode(audio_base64[0])
@@ -191,7 +190,7 @@ if audio_base64:
         st.text(gpt_icds)
 
         st.subheader("📄 PDF-Export")
-        logo_path = "logo.png"
+        logo_path = "logo.png"  # optional
         pdf_buffer = create_pdf_report(final_report, logo_path=logo_path)
         st.download_button("⬇️ PDF herunterladen", data=pdf_buffer, file_name="arztbrief.pdf", mime="application/pdf")
         st.download_button("⬇️ Arztbrief als Textdatei", final_report, file_name="arztbrief.txt")
