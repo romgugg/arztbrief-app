@@ -46,7 +46,7 @@ def transcribe_audio(file):
             language="de"
         )
 
-    return transcript["text"]
+    return transcript.text
     
 def generate_report_with_gpt(transcript):
     messages = [
