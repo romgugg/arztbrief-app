@@ -1,4 +1,3 @@
-
 import streamlit as st
 import openai
 import tempfile
@@ -9,7 +8,9 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 from io import BytesIO
+from pydub import AudioSegment
 
+# OpenAI-Client mit API-Key aus st.secrets
 from openai import OpenAI
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
@@ -28,19 +29,30 @@ def load_icd10_mapping(filepath="icd10gm2025_codes.txt"):
     icd_map = {row["Beschreibung"].lower(): row["Code"] for _, row in df.iterrows()}
     return icd_map
 
+# ✅ Audioverarbeitung verbessert: Robust für .m4a, .mp3, .wav
 def transcribe_audio(uploaded_file):
-    suffix = os.path.splitext(uploaded_file.name)[-1]
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(uploaded_file.read())
-        tmp_path = tmp.name
-    with open(tmp_path, "rb") as f:
-        transcript = client.audio.transcriptions.create(
-    model="whisper-1",
-    file=f,
-    language="de"
-)
-    os.remove(tmp_path)
-    return transcript.text
+    try:
+        # Lade Audio aus Upload
+        audio = AudioSegment.from_file(uploaded_file)
+
+        # Exportiere als temporäre .wav-Datei
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_wav:
+            audio.export(tmp_wav.name, format="wav")
+            tmp_wav_path = tmp_wav.name
+
+        # Sende an Whisper
+        with open(tmp_wav_path, "rb") as f:
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=f,
+                language="de"
+            )
+
+        os.remove(tmp_wav_path)
+        return transcript.text
+
+    except Exception as e:
+        raise RuntimeError(f"Fehler bei der Audioverarbeitung: {e}")
 
 def generate_report_with_gpt(transkript):
     messages = [
@@ -137,10 +149,14 @@ audio_file = st.file_uploader("📁 Audioaufnahme hochladen", type=["mp3", "wav"
 
 if audio_file:
     with st.spinner("🔍 Transkription läuft…"):
-        transkript = transcribe_audio(audio_file)
-    st.success("✅ Transkription abgeschlossen.")
-    st.subheader("📝 Transkript")
-    st.text_area("Transkribierter Text", transkript, height=250)
+        try:
+            transkript = transcribe_audio(audio_file)
+            st.success("✅ Transkription abgeschlossen.")
+            st.subheader("📝 Transkript")
+            st.text_area("Transkribierter Text", transkript, height=250)
+        except Exception as e:
+            st.error(str(e))
+            st.stop()
 
     if st.button("🧠 Arztbrief generieren mit GPT"):
         with st.spinner("💬 GPT analysiert das Gespräch…"):
