@@ -1,7 +1,7 @@
 
 import streamlit as st
 import whisper
-from openai
+import openai
 import tempfile
 import os
 import re
