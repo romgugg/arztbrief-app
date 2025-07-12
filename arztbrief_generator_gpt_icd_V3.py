@@ -13,7 +13,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 from io import BytesIO
 
 # OpenAI Client
-client = OpenAI()
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 # === SYSTEMPROMPT ===
 SYSTEM_PROMPT = """Du bist ein medizinischer Assistent, der aus Transkripten von Arzt-Patienten-Gesprächen strukturierte Arztbriefe erstellt.
