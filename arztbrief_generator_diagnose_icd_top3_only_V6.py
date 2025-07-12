@@ -150,24 +150,24 @@ if uploaded_file:
         st.text_area("Arztbrief mit ICD-10-Codes", report, height=400)
 
         def create_pdf_report(brief_text):
-            buffer = BytesIO()
-            doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=50, bottomMargin=50)
-            styles = getSampleStyleSheet()
-            elements = []
-            for section in brief_text.split("
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=50, bottomMargin=50)
+    styles = getSampleStyleSheet()
+    elements = []
+    for section in brief_text.split("
 
 "):
-                lines = section.strip().split("
+        lines = section.strip().split("
 ", 1)
-                if len(lines) == 2:
-                    heading, content = lines
-                    elements.append(Paragraph(f"<b>{heading}:</b>", styles["Heading4"]))
-                    elements.append(Paragraph(content.strip().replace("
+        if len(lines) == 2:
+            heading, content = lines
+            elements.append(Paragraph(f"<b>{heading}:</b>", styles["Heading4"]))
+            elements.append(Paragraph(content.strip().replace("
 ", "<br/>"), styles["BodyText"]))
-                    elements.append(Spacer(1, 12))
-            doc.build(elements)
-            buffer.seek(0)
-            return buffer
+            elements.append(Spacer(1, 12))
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
 
         pdf_buffer = create_pdf_report(report)
         st.download_button("⬇️ PDF herunterladen", data=pdf_buffer, file_name="arztbrief.pdf", mime="application/pdf")
