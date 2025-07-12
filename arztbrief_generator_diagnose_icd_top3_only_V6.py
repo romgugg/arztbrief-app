@@ -49,12 +49,12 @@ def generate_report_with_gpt(transcript):
 {transcript}"""}
     ]
 
-    response = openai.ChatCompletion.create(
-        model="gpt-4o",
-        messages=messages,
-        temperature=0.3
-    )
-    return response.choices[0].message["content"]
+    response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=messages,
+    temperature=0.3
+)
+return response.choices[0].message.content
 
 def find_icd_codes_in_diagnose_section(report_text, icd_map, top_n=3, threshold=0.85):
     diagnosis = ""
