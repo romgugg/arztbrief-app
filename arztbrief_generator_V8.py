@@ -94,12 +94,11 @@ if "transcription_done" not in st.session_state:
     st.session_state.transcription_done = False
 
 st.write("🔁 Bereit zum Empfang der Audioaufnahme…")
-if st.button("📥 Aufnahme verarbeiten"):
-    js_response = streamlit_js_eval(js_expressions=js_code, key="recorder")
-    if js_response and js_response != st.session_state.get("audio_base64"):
-        st.session_state.audio_base64 = js_response
-        st.session_state.transcription_done = False
-        st.experimental_rerun()
+js_response = streamlit_js_eval(js_expressions=js_code, key="recorder")
+if js_response and js_response != st.session_state.get("audio_base64"):
+    st.session_state.audio_base64 = js_response
+    st.session_state.transcription_done = False
+    st.experimental_rerun()
 
 if st.session_state.get("audio_base64") and not st.session_state.get("transcription_done", False):
     with st.spinner("🔍 Transkription läuft..."):
