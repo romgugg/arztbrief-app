@@ -96,9 +96,10 @@ if "transcription_done" not in st.session_state:
 
 js_response = streamlit_js_eval(js_expressions=js_code, key="recorder", trigger=True)
 
-if js_response and js_response != st.session_state.get("audio_base64") and not st.session_state.get("transcription_done", False):
+if js_response and js_response != st.session_state.get("audio_base64"):
     st.session_state.audio_base64 = js_response
-    st.rerun()
+    st.session_state.transcription_done = False
+    st.experimental_rerun()
 
 if st.session_state.get("audio_base64") and not st.session_state.get("transcription_done", False):
     st.success("📥 Audio wurde empfangen und wird transkribiert...")
@@ -159,6 +160,7 @@ if uploaded_file:
         import subprocess
         import uuid
         st.warning("⚠️ Die Datei konnte nicht direkt verarbeitet werden. Versuche WAV-Konvertierung...")
+        wav_path = tmp_path.replace(".webm", f"_{uuid.uuid4().hex}.wav")
         subprocess.run(["ffmpeg", "-y", "-i", tmp_path, wav_path], check=True)
         with open(wav_path, "rb") as audio_file:
             transcript = client.audio.transcriptions.create(
