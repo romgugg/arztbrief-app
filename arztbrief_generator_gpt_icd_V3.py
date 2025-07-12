@@ -115,13 +115,16 @@ def create_pdf_report(brief_text, logo_path=None):
     styles = getSampleStyleSheet()
     elements = []
 
-    if logo_path:
-        try:
-            img = Image(logo_path, width=150, height=50)
-            elements.append(img)
-            elements.append(Spacer(1, 20))
-        except:
-            pass
+   import os
+
+if logo_path and os.path.exists(logo_path):
+    try:
+        img = Image(logo_path, width=150, height=50)
+        elements.append(img)
+        elements.append(Spacer(1, 20))
+    except Exception as e:
+        print(f"⚠️ Logo konnte nicht geladen werden: {e}")
+
 
     for section in brief_text.split("\n\n"):
         lines = section.strip().split("\n", 1)
