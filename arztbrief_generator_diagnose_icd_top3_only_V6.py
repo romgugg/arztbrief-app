@@ -1,6 +1,6 @@
 
 import streamlit as st
-from openai import OpenAI
+import openai
 import tempfile
 import os
 import pandas as pd
@@ -10,8 +10,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image
 from io import BytesIO
 
-# OpenAI Client
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 SYSTEM_PROMPT = """Du bist ein medizinischer Assistent, der aus Transkripten von Arzt-Patienten-Gesprächen strukturierte Arztbriefe erstellt.
 Gliedere den Brief in folgende Abschnitte:
@@ -28,69 +27,61 @@ def load_icd10_mapping(filepath="icd10gm2025_codes.txt"):
     icd_map = {row["Beschreibung"].lower(): row["Code"] for _, row in df.iterrows()}
     return icd_map
 
-def transcribe_audio(file):
-    suffix = os.path.splitext(file.name)[-1]
+def transcribe_audio(uploaded_file):
+    suffix = os.path.splitext(uploaded_file.name)[-1]
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(file.read())
+        tmp.write(uploaded_file.read())
         tmp_path = tmp.name
     with open(tmp_path, "rb") as f:
-        transcript = client.audio.transcriptions.create(
+        transcript = openai.Audio.transcribe(
             model="whisper-1",
             file=f,
             language="de"
         )
     os.remove(tmp_path)
-    return transcript.text
+    return transcript["text"]
 
 def generate_report_with_gpt(transcript):
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": f"Hier ist das Gespräch:\n{transcript}"}
+        {"role": "user", "content": f"Hier ist das Gespräch:
+{transcript}"}
     ]
-    response = client.chat.completions.create(
+    response = openai.ChatCompletion.create(
         model="gpt-4o",
         messages=messages,
         temperature=0.3
     )
-    return response.choices[0].message.content
+    return response.choices[0].message["content"]
 
-def extract_diagnose_section(report_text):
-    lines = report_text.splitlines()
+def find_icd_codes_in_diagnose_section(report_text, icd_map, top_n=3, threshold=0.85):
+    diagnosis = ""
     capture = False
-    diagnose_lines = []
-
-    for line in lines:
+    for line in report_text.splitlines():
         if line.strip().lower().startswith("diagnose"):
             capture = True
             continue
         if capture:
             if line.strip() == "":
                 break
-            diagnose_lines.append(line.strip())
-
-    return " ".join(diagnose_lines)
-
-def find_icd_codes_in_text(text, icd_map, threshold=0.85, top_n=3):
-    found = []
-    text_words = set(text.lower().split())
+            diagnosis += line + " "
+    diagnosis_words = set(diagnosis.lower().split())
+    matches = []
     for desc, code in icd_map.items():
         desc_words = set(desc.lower().split())
-        if desc_words & text_words:
-            found.append((desc.title(), code))
+        if desc_words & diagnosis_words:
+            matches.append((desc.title(), code))
         else:
-            matches = get_close_matches(desc.lower(), text_words, n=1, cutoff=threshold)
-            if matches:
-                found.append((desc.title(), code))
-    return found[:top_n]
+            if get_close_matches(desc.lower(), diagnosis_words, n=1, cutoff=threshold):
+                matches.append((desc.title(), code))
+    return matches[:top_n]
 
 def insert_icds_into_diagnosis(report_text, icd_map):
-    diagnose_text = extract_diagnose_section(report_text)
-    top_icds = find_icd_codes_in_text(diagnose_text, icd_map)
-
     lines = report_text.splitlines()
     new_lines = []
     inside_diagnose = False
     inserted = False
+    top_icds = find_icd_codes_in_diagnose_section(report_text, icd_map)
 
     for line in lines:
         new_lines.append(line)
@@ -103,24 +94,7 @@ def insert_icds_into_diagnosis(report_text, icd_map):
                 for term, code in top_icds:
                     new_lines.append(f"- {term} → {code}")
                 inserted = True
-
     return "\n".join(new_lines)
-
-def check_report_quality(report_text):
-    checks = []
-    if "Diagnose" not in report_text or "nicht dokumentiert" in report_text.split("Diagnose")[1][:100]:
-        checks.append("⚠️ Diagnose fehlt oder unklar.")
-    if "Therapie" not in report_text or "nicht dokumentiert" in report_text.split("Therapie")[1][:100]:
-        checks.append("⚠️ Therapieempfehlung nicht angegeben.")
-    if "Aufklärung" not in report_text:
-        checks.append("⚠️ Keine Aufklärung dokumentiert.")
-    if "Operationsplanung" not in report_text:
-        checks.append("ℹ️ Kein OP-Termin genannt.")
-    if "Zuweisung" not in report_text and "Blutbild" not in report_text:
-        checks.append("ℹ️ Keine organisatorischen Hinweise (z. B. Blutbild, Zuweisung).")
-    if not checks:
-        checks.append("✅ Bericht scheint vollständig und strukturiert zu sein.")
-    return checks
 
 def create_pdf_report(brief_text, logo_path=None):
     buffer = BytesIO()
@@ -173,16 +147,6 @@ if audio_file:
 
         st.subheader("📄 Generierter Arztbrief")
         st.text_area("Arztbrief mit ICD-10", report_with_icd, height=400)
-
-        st.subheader("🧪 Regelprüfung")
-        feedback = check_report_quality(report_with_icd)
-        for msg in feedback:
-            if "⚠️" in msg:
-                st.error(msg)
-            elif "ℹ️" in msg:
-                st.info(msg)
-            else:
-                st.success(msg)
 
         st.subheader("📄 PDF-Export")
         logo_path = "logo.png"
