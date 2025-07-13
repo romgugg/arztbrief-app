@@ -4,11 +4,11 @@ import tempfile
 import os
 from openai import OpenAI
 from io import BytesIO
+from reportlab.platypus import Image, Table, TableStyle, Paragraph, Spacer, SimpleDocTemplate
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 
-# Streamlit-Konfiguration
+# === STREAMLIT UI ===
 st.set_page_config(page_title="📄 Arztbrief aus Audio-Datei", layout="centered")
 st.title("📄 Arztbrief aus Audio-Datei")
 
@@ -17,7 +17,7 @@ st.markdown("""
 Ein strukturierter Arztbrief wird automatisch generiert.
 """)
 
-# 🔐 API-Key Eingabe
+# === API-KEY EINGABE ===
 st.markdown("""
 🔐 Gib deinen persönlichen [OpenAI API-Key](https://platform.openai.com/account/api-keys) ein.  
 Dein Key wird **nicht gespeichert** – er wird nur für diese Sitzung genutzt.
@@ -28,15 +28,49 @@ if not api_key:
     st.info("Bitte gib deinen OpenAI API-Key ein, um fortzufahren.")
     st.stop()
 
-# OpenAI Setup
 client = OpenAI(api_key=api_key)
 
-# PDF-Erstellung
-def create_pdf_report(brief_text):
+# === PDF-FUNKTION ===
+def create_pdf_report(brief_text, mit_briefkopf=False, logo_path="/mnt/data/e2bb590e-24d4-42a0-848f-8fa14fce774e.png"):
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=50, bottomMargin=50)
     styles = getSampleStyleSheet()
     elements = []
+
+    if mit_briefkopf:
+        try:
+            logo = Image(logo_path, width=180, height=60)
+        except:
+            logo = Paragraph("<b>KSW Winterthur</b>", styles["Title"])
+
+        header_data = [
+            [logo, Paragraph(
+                "<b>Kantonsspital Winterthur</b><br/>"
+                "Brauersstrasse 15, Postfach<br/>"
+                "8401 Winterthur<br/><a href='https://www.ksw.ch'>www.ksw.ch</a><br/><br/>"
+                "<b>Klinik für Radiologie und Nuklearmedizin</b><br/>"
+                "Prof. Dr. med. Roman Guggenberger<br/>"
+                "Chefarzt und Klinikleiter<br/><br/>"
+                "Diagnostische Radiologie<br/>"
+                "Chefarzt Dr. Valentin Fretz<br/><br/>"
+                "Nuklearmedizin<br/>"
+                "Chefarzt PD Dr. Bernd Klaeser<br/><br/>"
+                "Interventionelle Radiologie<br/>"
+                "Stv. Chefarzt PD Dr. Arash Najafi",
+                styles["Normal"]
+            )]
+        ]
+
+        table = Table(header_data, colWidths=[200, 330])
+        table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0)
+        ]))
+        elements.append(table)
+        elements.append(Spacer(1, 20))
+
     for section in brief_text.split("\n\n"):
         lines = section.strip().split("\n", 1)
         if len(lines) == 2:
@@ -44,15 +78,15 @@ def create_pdf_report(brief_text):
             elements.append(Paragraph(f"<b>{heading}:</b>", styles["Heading4"]))
             elements.append(Paragraph(content.strip().replace("\n", "<br/>"), styles["BodyText"]))
             elements.append(Spacer(1, 12))
+
     doc.build(elements)
     buffer.seek(0)
     return buffer
 
-# Initialisierung
+# === TRANSKRIPTION ===
 if "transcription_done" not in st.session_state:
     st.session_state.transcription_done = False
 
-# Datei-Upload
 uploaded_file = st.file_uploader("📤 Lade eine Audiodatei hoch", type=["mp3", "wav", "m4a", "webm"])
 
 if uploaded_file:
@@ -74,7 +108,7 @@ if uploaded_file:
         except Exception:
             import subprocess
             import uuid
-            st.warning("⚠️ Die Datei konnte nicht direkt verarbeitet werden. Versuche WAV-Konvertierung...")
+            st.warning("⚠️ Datei konnte nicht verarbeitet werden. Konvertiere nach WAV...")
             wav_path = tmp_path.replace(".webm", f"_{uuid.uuid4().hex}.wav")
             subprocess.run(["ffmpeg", "-y", "-i", tmp_path, wav_path], check=True)
             with open(wav_path, "rb") as audio_file:
@@ -90,9 +124,9 @@ if uploaded_file:
         st.session_state.transcription_done = True
         st.audio(uploaded_file, format="audio/webm")
         st.write("📝 Transkriptionstext (Ausschnitt):", transcript.text[:300])
-        st.download_button("⬇️ Vollständige Transkription", transcript.text, file_name="transkript.txt")
+        st.download_button("⬇️ Transkript herunterladen", transcript.text, file_name="transkript.txt")
 
-# Strukturwahl und Arztbrief-Generierung
+# === GPT ARZTBRIEF ===
 if st.session_state.transcription_done:
     st.markdown("## 🧾 Arztbriefstruktur wählen")
 
@@ -132,6 +166,9 @@ Gliedere in: Informationsstand der Angehörigen, besprochene Inhalte, Fragen und
     ausgewählte_struktur = st.selectbox("📄 Strukturtyp für den Arztbrief", list(struktur_optionen.keys()))
     system_prompt = struktur_optionen[ausgewählte_struktur]
 
+    pdf_layout = st.selectbox("🖨️ PDF-Layout wählen", ["Standard (nur Text)", "Mit Logo & Briefkopf"])
+    briefkopf_aktiv = pdf_layout == "Mit Logo & Briefkopf"
+
     if st.button("🧠 Arztbrief generieren mit GPT"):
         with st.spinner("💬 GPT erstellt den Arztbrief..."):
             chat = client.chat.completions.create(
@@ -147,6 +184,6 @@ Gliedere in: Informationsstand der Angehörigen, besprochene Inhalte, Fragen und
             st.subheader("📄 Generierter Arztbrief")
             st.text_area("Arztbrief mit ICD-10-Codes", report, height=400)
 
-            pdf_buffer = create_pdf_report(report)
+            pdf_buffer = create_pdf_report(report, mit_briefkopf=briefkopf_aktiv)
             st.download_button("⬇️ PDF herunterladen", data=pdf_buffer, file_name="arztbrief.pdf", mime="application/pdf")
             st.download_button("⬇️ Arztbrief als Textdatei", report, file_name="arztbrief.txt")
