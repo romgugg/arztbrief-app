@@ -10,8 +10,29 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 import streamlit.components.v1 as components
 from streamlit_js_eval import streamlit_js_eval
 
-# OpenAI setup
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+# Streamlit-Konfiguration
+st.set_page_config(page_title="🎤 Arztbrief aus Browser-Aufnahme", layout="centered")
+st.title("🎤 Arztbrief aus Browser-Aufnahme")
+
+st.markdown("""
+🎙️ Nimm ein Arzt-Patienten-Gespräch direkt im Browser auf.
+Ein strukturierter Arztbrief wird automatisch erstellt.
+""")
+
+# 🔐 API-Key Eingabe
+st.markdown("""
+🔐 Gib deinen persönlichen [OpenAI API-Key](https://platform.openai.com/account/api-keys) ein, um die App zu verwenden.
+Dein Key wird **nicht gespeichert** – nur für diese Sitzung genutzt.
+""")
+
+api_key = st.text_input("OpenAI API-Key:", type="password")
+if not api_key:
+    st.info("Bitte gib deinen OpenAI API-Key ein, um fortzufahren.")
+    st.stop()
+
+# OpenAI Setup mit Nutzer-Key
+client = OpenAI(api_key=api_key)
+
 
 st.set_page_config(page_title="🎤 Arztbrief aus Browser-Aufnahme", layout="centered")
 st.title("🎤 Arztbrief aus Browser-Aufnahme")
