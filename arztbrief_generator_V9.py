@@ -7,21 +7,19 @@ from io import BytesIO
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-import streamlit.components.v1 as components
-from streamlit_js_eval import streamlit_js_eval
 
 # UI-Konfiguration
-st.set_page_config(page_title="🎤 Arztbrief aus Browser-Aufnahme", layout="centered")
-st.title("🎤 Arztbrief aus Browser-Aufnahme")
+st.set_page_config(page_title="📄 Arztbrief aus Audio-Datei", layout="centered")
+st.title("📄 Arztbrief aus Audio-Datei")
 
 st.markdown("""
-🎙️ Nimm ein Arzt-Patienten-Gespräch direkt im Browser auf.
-Ein strukturierter Arztbrief wird automatisch erstellt.
+📁 Lade eine Arzt-Patienten-Aufnahme hoch (MP3, WAV, M4A, WEBM).  
+Ein strukturierter Arztbrief wird automatisch generiert.
 """)
 
 # 🔐 API-Key Eingabe
 st.markdown("""
-🔐 Gib deinen persönlichen [OpenAI API-Key](https://platform.openai.com/account/api-keys) ein, um die App zu verwenden.
+🔐 Gib deinen persönlichen [OpenAI API-Key](https://platform.openai.com/account/api-keys) ein, um die App zu verwenden.  
 Dein Key wird **nicht gespeichert** – nur für diese Sitzung genutzt.
 """)
 
@@ -50,80 +48,20 @@ def create_pdf_report(brief_text):
     buffer.seek(0)
     return buffer
 
-# HTML/JS Audio Recorder
-components.html("""
-<script>
-let mediaRecorder;
-let audioChunks = [];
-function startRecording() {
-    document.getElementById("status").innerText = "🔴 Aufnahme läuft...";
-    navigator.mediaDevices.getUserMedia({ audio: true })
-        .then(stream => {
-            mediaRecorder = new MediaRecorder(stream);
-            audioChunks = [];
-            mediaRecorder.ondataavailable = event => {
-                audioChunks.push(event.data);
-            };
-            mediaRecorder.onstop = () => {
-                document.getElementById("status").innerText = "✅ Aufnahme abgeschlossen.";
-                const blob = new Blob(audioChunks, { type: 'audio/webm' });
-                const reader = new FileReader();
-                reader.readAsDataURL(blob);
-                reader.onloadend = () => {
-                    const base64data = reader.result;
-                    window.parent.postMessage({ type: 'FROM_IFRAME', base64: base64data }, '*');
-                };
-            };
-            mediaRecorder.start();
-        });
-}
-function stopRecording() {
-    if (mediaRecorder && mediaRecorder.state === "recording") {
-        mediaRecorder.stop();
-    }
-}
-</script>
-<div>
-    <button onclick="startRecording()">🎙️ Aufnahme starten</button>
-    <button onclick="stopRecording()">⏹️ Aufnahme stoppen</button>
-    <p id="status" style="font-weight:bold; color:darkred;"></p>
-</div>
-""", height=200)
-
-# JS Listener
-js_code = """
-await new Promise(resolve => {
-  window.addEventListener('message', (event) => {
-    if (event.data && event.data.base64) {
-      resolve(event.data.base64);
-    }
-  }, { once: true });
-})
-"""
-
 # Session-State Initialisierung
-if "audio_base64" not in st.session_state:
-    st.session_state.audio_base64 = None
 if "transcription_done" not in st.session_state:
     st.session_state.transcription_done = False
 
-# Aufnahme übernehmen
-js_response = streamlit_js_eval(js_expressions=js_code, key="recorder", trigger=True)
+# Datei-Upload
+uploaded_file = st.file_uploader("📤 Lade eine Audiodatei hoch", type=["mp3", "wav", "m4a", "webm"])
 
-if js_response and js_response != st.session_state.get("audio_base64"):
-    st.session_state.audio_base64 = js_response
+if uploaded_file:
+    st.success("📥 Datei erfolgreich hochgeladen.")
     st.session_state.transcription_done = False
-    st.experimental_rerun()
 
-# Automatische Transkription
-if st.session_state.get("audio_base64") and not st.session_state.get("transcription_done", False):
     with st.spinner("🔍 Transkription läuft..."):
-        st.success("📥 Audio wurde empfangen und wird transkribiert...")
-        audio_bytes = base64.b64decode(st.session_state.audio_base64.split(",")[1])
-        st.audio(audio_bytes, format="audio/webm")
-
         with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
-            tmp.write(audio_bytes)
+            tmp.write(uploaded_file.read())
             tmp_path = tmp.name
 
         try:
@@ -136,7 +74,7 @@ if st.session_state.get("audio_base64") and not st.session_state.get("transcript
         except Exception:
             import subprocess
             import uuid
-            st.warning("⚠️ Ursprüngliche Datei konnte nicht verarbeitet werden. Versuche WAV-Konvertierung...")
+            st.warning("⚠️ Die Datei konnte nicht direkt verarbeitet werden. Versuche WAV-Konvertierung...")
             wav_path = tmp_path.replace(".webm", f"_{uuid.uuid4().hex}.wav")
             subprocess.run(["ffmpeg", "-y", "-i", tmp_path, wav_path], check=True)
             with open(wav_path, "rb") as audio_file:
@@ -146,53 +84,13 @@ if st.session_state.get("audio_base64") and not st.session_state.get("transcript
                     language="de"
                 )
             os.remove(wav_path)
-        os.remove(tmp_path)
 
+        os.remove(tmp_path)
         st.session_state.transcription_text = transcript.text
         st.session_state.transcription_done = True
-        st.write("📝 Vollständiger Transkriptionstext:")
-        st.text_area("Transkript", st.session_state.transcription_text, height=300)
-        st.download_button("⬇️ Transkript als Textdatei", st.session_state.transcription_text, file_name="transkript.txt")
-
-st.divider()
-
-# Alternativer Datei-Upload
-uploaded_file = st.file_uploader("📁 Oder lade eine Audiodatei hoch (MP3, WAV, M4A, WEBM)", type=["mp3", "wav", "m4a", "webm"])
-if uploaded_file:
-    st.success("📥 Datei erfolgreich hochgeladen.")
-    st.session_state.transcription_done = False
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
-        tmp.write(uploaded_file.read())
-        tmp_path = tmp.name
-
-    try:
-        with open(tmp_path, "rb") as audio_file:
-            transcript = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file,
-                language="de"
-            )
-    except Exception:
-        import subprocess
-        import uuid
-        st.warning("⚠️ Die Datei konnte nicht direkt verarbeitet werden. Versuche WAV-Konvertierung...")
-        wav_path = tmp_path.replace(".webm", f"_{uuid.uuid4().hex}.wav")
-        subprocess.run(["ffmpeg", "-y", "-i", tmp_path, wav_path], check=True)
-        with open(wav_path, "rb") as audio_file:
-            transcript = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file,
-                language="de"
-            )
-        os.remove(wav_path)
-
-    os.remove(tmp_path)
-    st.session_state.audio_base64 = None
-    st.session_state.transcription_text = transcript.text
-    st.session_state.transcription_done = True
-    st.audio(uploaded_file, format="audio/webm")
-    st.write("📝 Transkriptionstext (Ausschnitt):", transcript.text[:300])
+        st.audio(uploaded_file, format="audio/webm")
+        st.write("📝 Transkriptionstext (Ausschnitt):", transcript.text[:300])
+        st.download_button("⬇️ Vollständige Transkription", transcript.text, file_name="transkript.txt")
 
 # GPT-Arztbrief erzeugen
 if st.session_state.transcription_done:
