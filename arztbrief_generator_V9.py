@@ -168,7 +168,7 @@ Gliedere in: Informationsstand der Angehörigen, besprochene Inhalte, Fragen und
 
     if st.session_state.arztbrief_generiert:
         st.subheader("📄 Generierter Arztbrief")
-        edited_report = st.text_area("✏️ Arztbrief bearbeiten (optional)", st.session_state.arztbrief, height=400)
+        edited_report = st.text_area("✏️ Arztbrief bearbeiten (optional)", st.session_state.arztbrief.replace("*", ""), height=400)
 
         pdf_layout = st.selectbox("🖨️ PDF-Layout wählen", ["Standard (nur Text)", "Mit Logo & Briefkopf"], key="layout_select")
         briefkopf_aktiv = pdf_layout == "Mit Logo & Briefkopf"
