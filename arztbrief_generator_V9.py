@@ -82,9 +82,11 @@ def create_pdf_report(brief_text, mit_briefkopf=False, logo_path="logo.png"):
     buffer.seek(0)
     return buffer
 
+# === Transkriptionsstatus ===
 if "transcription_done" not in st.session_state:
     st.session_state.transcription_done = False
 
+# === Datei-Upload ===
 uploaded_file = st.file_uploader("📄 Lade eine Audiodatei hoch", type=["mp3", "wav", "m4a", "webm"])
 
 if uploaded_file:
@@ -132,6 +134,7 @@ if uploaded_file:
         st.write("📝 Transkriptionstext (Ausschnitt):", transcript.text[:300])
         st.download_button("⬇️ Transkript herunterladen", transcript.text, file_name="transkript.txt")
 
+# === GPT Arztbrief-Generierung ===
 if st.session_state.transcription_done:
     st.markdown("## 💾 Arztbriefstruktur wählen")
 
@@ -175,7 +178,7 @@ Gliedere in: Informationsstand der Angehörigen, besprochene Inhalte, Fragen und
             pdf_layout = st.selectbox("🖨️ PDF-Layout wählen", ["Standard (nur Text)", "Mit Logo & Briefkopf"], key="layout_select")
             briefkopf_aktiv = pdf_layout == "Mit Logo & Briefkopf"
 
-               if st.button("📄 PDF jetzt generieren"):
+            if st.button("📄 PDF jetzt generieren"):
                 pdf_buffer = create_pdf_report(edited_report, mit_briefkopf=briefkopf_aktiv)
                 st.download_button("⬇️ PDF herunterladen", data=pdf_buffer, file_name="arztbrief.pdf", mime="application/pdf")
                 st.download_button("⬇️ Arztbrief als Textdatei", edited_report, file_name="arztbrief.txt")
