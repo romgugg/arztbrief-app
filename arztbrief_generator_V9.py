@@ -11,7 +11,6 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_RIGHT
 
-# === UI ===
 st.set_page_config(page_title="📄 Arztbrief aus Audio-Datei", layout="centered")
 st.title("📄 Arztbrief aus Audio-Datei")
 
@@ -20,7 +19,6 @@ st.markdown("""
 Ein strukturierter Arztbrief wird automatisch generiert.
 """)
 
-# === API-Key ===
 st.markdown("""
 🔐 Gib deinen persönlichen [OpenAI API-Key](https://platform.openai.com/account/api-keys) ein.  
 Dein Key wird **nicht gespeichert** – er wird nur für diese Sitzung genutzt.
@@ -33,7 +31,6 @@ if not api_key:
 
 client = OpenAI(api_key=api_key)
 
-# === PDF-Erstellung ===
 def create_pdf_report(brief_text, mit_briefkopf=False, logo_path="logo.png"):
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=50, bottomMargin=50)
@@ -82,11 +79,9 @@ def create_pdf_report(brief_text, mit_briefkopf=False, logo_path="logo.png"):
     buffer.seek(0)
     return buffer
 
-# === Transkriptionsstatus ===
 if "transcription_done" not in st.session_state:
     st.session_state.transcription_done = False
 
-# === Datei-Upload ===
 uploaded_file = st.file_uploader("📄 Lade eine Audiodatei hoch", type=["mp3", "wav", "m4a", "webm"])
 
 if uploaded_file:
@@ -112,10 +107,6 @@ if uploaded_file:
 
             try:
                 with open(wav_path, "rb") as audio_file:
-                    mime_type, _ = mimetypes.guess_type(wav_path)
-                    if mime_type is None:
-                        mime_type = "audio/wav"
-
                     transcript = client.audio.transcriptions.create(
                         model="whisper-1",
                         file=audio_file,
@@ -134,7 +125,6 @@ if uploaded_file:
         st.write("📝 Transkriptionstext (Ausschnitt):", transcript.text[:300])
         st.download_button("⬇️ Transkript herunterladen", transcript.text, file_name="transkript.txt")
 
-# === GPT Arztbrief-Generierung ===
 if st.session_state.transcription_done:
     st.markdown("## 💾 Arztbriefstruktur wählen")
 
@@ -178,7 +168,8 @@ Gliedere in: Informationsstand der Angehörigen, besprochene Inhalte, Fragen und
             pdf_layout = st.selectbox("🖨️ PDF-Layout wählen", ["Standard (nur Text)", "Mit Logo & Briefkopf"], key="layout_select")
             briefkopf_aktiv = pdf_layout == "Mit Logo & Briefkopf"
 
-            if st.button("📄 PDF jetzt generieren"):
+            pdf_generieren = st.button("📄 PDF jetzt generieren")
+            if pdf_generieren:
                 pdf_buffer = create_pdf_report(edited_report, mit_briefkopf=briefkopf_aktiv)
                 st.download_button("⬇️ PDF herunterladen", data=pdf_buffer, file_name="arztbrief.pdf", mime="application/pdf")
 
