@@ -74,7 +74,7 @@ def create_pdf_report(brief_text, mit_briefkopf=False, logo_path="logo.png"):
         lines = section.strip().split("\n", 1)
         if len(lines) == 2:
             heading, content = lines
-            elements.append(Paragraph(f"<b>{heading}:</b>", styles["Heading4"]))
+            elements.append(Paragraph(heading + ":", styles["Heading4"]))
             elements.append(Paragraph(content.strip().replace("\n", "<br/>"), styles["BodyText"]))
             elements.append(Spacer(1, 12))
 
@@ -157,9 +157,6 @@ Gliedere in: Informationsstand der Angehörigen, besprochene Inhalte, Fragen und
     ausgewählte_struktur = st.selectbox("📄 Strukturtyp für den Arztbrief", list(struktur_optionen.keys()))
     system_prompt = struktur_optionen[ausgewählte_struktur]
 
-    pdf_layout = st.selectbox("🖨️ PDF-Layout wählen", ["Standard (nur Text)", "Mit Logo & Briefkopf"])
-    briefkopf_aktiv = pdf_layout == "Mit Logo & Briefkopf"
-
     if st.button("🧠 Arztbrief generieren mit GPT"):
         with st.spinner("💬 GPT erstellt den Arztbrief..."):
             chat = client.chat.completions.create(
@@ -174,6 +171,9 @@ Gliedere in: Informationsstand der Angehörigen, besprochene Inhalte, Fragen und
 
             st.subheader("📄 Generierter Arztbrief")
             st.text_area("Arztbrief mit ICD-10-Codes", report, height=400)
+
+            pdf_layout = st.selectbox("🖨️ PDF-Layout wählen", ["Standard (nur Text)", "Mit Logo & Briefkopf"])
+            briefkopf_aktiv = pdf_layout == "Mit Logo & Briefkopf"
 
             pdf_buffer = create_pdf_report(report, mit_briefkopf=briefkopf_aktiv)
             st.download_button("⬇️ PDF herunterladen", data=pdf_buffer, file_name="arztbrief.pdf", mime="application/pdf")
