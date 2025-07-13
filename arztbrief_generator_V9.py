@@ -170,11 +170,11 @@ Gliedere in: Informationsstand der Angehörigen, besprochene Inhalte, Fragen und
             report = chat.choices[0].message.content.strip()
 
             st.subheader("📄 Generierter Arztbrief")
-            st.text_area("Arztbrief mit ICD-10-Codes", report, height=400)
+            edited_report = st.text_area("✏️ Arztbrief bearbeiten (optional)", report, height=400)
 
             pdf_layout = st.selectbox("🖨️ PDF-Layout wählen", ["Standard (nur Text)", "Mit Logo & Briefkopf"])
             briefkopf_aktiv = pdf_layout == "Mit Logo & Briefkopf"
 
-            pdf_buffer = create_pdf_report(report, mit_briefkopf=briefkopf_aktiv)
+            pdf_buffer = create_pdf_report(edited_report, mit_briefkopf=briefkopf_aktiv)
             st.download_button("⬇️ PDF herunterladen", data=pdf_buffer, file_name="arztbrief.pdf", mime="application/pdf")
-            st.download_button("⬇️ Arztbrief als Textdatei", report, file_name="arztbrief.txt")
+            st.download_button("⬇️ Arztbrief als Textdatei", edited_report, file_name="arztbrief.txt")
