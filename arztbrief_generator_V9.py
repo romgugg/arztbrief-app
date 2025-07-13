@@ -6,9 +6,10 @@ import uuid
 import mimetypes
 from openai import OpenAI
 from io import BytesIO
-from reportlab.platypus import Image, Table, TableStyle, Paragraph, Spacer, SimpleDocTemplate
+from reportlab.platypus import Image, Paragraph, Spacer, SimpleDocTemplate
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_RIGHT
 
 # === UI ===
 st.set_page_config(page_title="📄 Arztbrief aus Audio-Datei", layout="centered")
@@ -41,36 +42,32 @@ def create_pdf_report(brief_text, mit_briefkopf=False, logo_path="logo.png"):
 
     if mit_briefkopf:
         try:
-            logo = Image(logo_path, width=180, height=60)
+            logo = Image(logo_path, width=140, height=25)
+            logo.hAlign = 'RIGHT'
+            elements.append(logo)
+            elements.append(Spacer(1, 6))
         except Exception as e:
             st.warning(f"⚠️ Logo konnte nicht geladen werden: {e}")
-            logo = Paragraph("<b>KSW Winterthur</b>", styles["Title"])
 
-        header_data = [
-            [logo, Paragraph(
-                "<b>Kantonsspital Winterthur</b><br/>"
-                "Brauersstrasse 15, Postfach<br/>"
-                "8401 Winterthur<br/><a href='https://www.ksw.ch'>www.ksw.ch</a><br/><br/>"
-                "<b>Klinik für Radiologie und Nuklearmedizin</b><br/>"
-                "Prof. Dr. med. Roman Guggenberger<br/>"
-                "Chefarzt und Klinikleiter<br/><br/>"
-                "Diagnostische Radiologie<br/>"
-                "Chefarzt Dr. Valentin Fretz<br/><br/>"
-                "Nuklearmedizin<br/>"
-                "Chefarzt PD Dr. Bernd Klaeser<br/><br/>"
-                "Interventionelle Radiologie<br/>"
-                "Stv. Chefarzt PD Dr. Arash Najafi",
-                styles["Normal"]
-            )]
-        ]
-        table = Table(header_data, colWidths=[200, 330])
-        table.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
-            ('LEFTPADDING', (0, 0), (-1, -1), 0),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 0)
-        ]))
-        elements.append(table)
+        right_align = ParagraphStyle(name="Right", parent=styles["Normal"], alignment=TA_RIGHT)
+        briefkopf_text = Paragraph(
+            """
+            <b>Kantonsspital Winterthur</b><br/>
+            Brauersstrasse 15, Postfach<br/>
+            8401 Winterthur<br/><a href='https://www.ksw.ch'>www.ksw.ch</a><br/><br/>
+            <b>Klinik für Radiologie und Nuklearmedizin</b><br/>
+            Prof. Dr. med. Roman Guggenberger<br/>
+            Chefarzt und Klinikleiter<br/><br/>
+            Diagnostische Radiologie<br/>
+            Chefarzt Dr. Valentin Fretz<br/><br/>
+            Nuklearmedizin<br/>
+            Chefarzt PD Dr. Bernd Klaeser<br/><br/>
+            Interventionelle Radiologie<br/>
+            Stv. Chefarzt PD Dr. Arash Najafi
+            """,
+            style=right_align
+        )
+        elements.append(briefkopf_text)
         elements.append(Spacer(1, 20))
 
     for section in brief_text.split("\n\n"):
@@ -85,15 +82,13 @@ def create_pdf_report(brief_text, mit_briefkopf=False, logo_path="logo.png"):
     buffer.seek(0)
     return buffer
 
-# === Status-Init ===
 if "transcription_done" not in st.session_state:
     st.session_state.transcription_done = False
 
-# === Datei-Upload ===
-uploaded_file = st.file_uploader("📤 Lade eine Audiodatei hoch", type=["mp3", "wav", "m4a", "webm"])
+uploaded_file = st.file_uploader("📄 Lade eine Audiodatei hoch", type=["mp3", "wav", "m4a", "webm"])
 
 if uploaded_file:
-    st.success("📥 Datei erfolgreich hochgeladen.")
+    st.success("📅 Datei erfolgreich hochgeladen.")
     st.session_state.transcription_done = False
 
     with st.spinner("🔍 Transkription läuft..."):
@@ -137,41 +132,26 @@ if uploaded_file:
         st.write("📝 Transkriptionstext (Ausschnitt):", transcript.text[:300])
         st.download_button("⬇️ Transkript herunterladen", transcript.text, file_name="transkript.txt")
 
-# === Arztbrief erstellen ===
 if st.session_state.transcription_done:
-    st.markdown("## 🧾 Arztbriefstruktur wählen")
+    st.markdown("## 💾 Arztbriefstruktur wählen")
 
     struktur_optionen = {
-        "Arztbrief Standard": """
-Du bist ein medizinischer Assistent, der aus Transkripten strukturierte Arztbriefe erstellt.
+        "Arztbrief Standard": """Du bist ein medizinischer Assistent, der aus Transkripten strukturierte Arztbriefe erstellt.
 Gliedere in: Anamnese, Diagnose, Therapie, Aufklärung, Organisatorisches, Operationsplanung, Patientenwunsch.
-Füge drei passende ICD-10-Codes unter Diagnose hinzu (Format: Bezeichnung → Code).
-""",
-        "Kurzarztbrief": """
-Erstelle einen kompakten medizinischen Arztbrief basierend auf einem Transkript.
+Füge drei passende ICD-10-Codes unter Diagnose hinzu (Format: Bezeichnung → Code).""",
+        "Kurzarztbrief": """Erstelle einen kompakten medizinischen Arztbrief basierend auf einem Transkript.
 Fasse die wichtigsten Punkte kurz und prägnant zusammen: Anamnese, Diagnose, Therapie.
-Der Brief soll sich auf maximal eine halbe Seite beschränken.
-""",
-        "Ambulante Konsultation": """
-Erstelle einen strukturierten Bericht einer ambulanten Konsultation.
-Berücksichtige: Anlass, subjektiver Bericht, objektive Befunde, Diagnose(n), Therapieempfehlung.
-""",
-        "Stationäre Konsultation": """
-Verfasse einen strukturierten Arztbrief einer stationären Konsultation.
-Struktur: Aufnahmegrund, Anamnese, Untersuchungsbefunde, Verlauf, Entlassungsdiagnose(n), Empfehlung.
-""",
-        "Aufklärungsgespräch": """
-Strukturiere den Text als Protokoll eines ärztlichen Aufklärungsgesprächs.
-Gliedere in: Gesprächsinhalt, Risiken/Nebenwirkungen, Patientenfragen, Zustimmung des Patienten.
-""",
-        "Abschlussgespräch": """
-Erstelle eine Zusammenfassung eines Abschlussgesprächs zwischen Arzt und Patient.
-Strukturiere in: Behandlungsverlauf, aktueller Zustand, empfohlene Nachsorge, Patientenzufriedenheit.
-""",
-        "Angehörigengespräch": """
-Protokolliere ein ärztliches Gespräch mit Angehörigen.
-Gliedere in: Informationsstand der Angehörigen, besprochene Inhalte, Fragen und Sorgen, weiteres Vorgehen.
-"""
+Der Brief soll sich auf maximal eine halbe Seite beschränken.""",
+        "Ambulante Konsultation": """Erstelle einen strukturierten Bericht einer ambulanten Konsultation.
+Berücksichtige: Anlass, subjektiver Bericht, objektive Befunde, Diagnose(n), Therapieempfehlung.""",
+        "Stationäre Konsultation": """Verfasse einen strukturierten Arztbrief einer stationären Konsultation.
+Struktur: Aufnahmegrund, Anamnese, Untersuchungsbefunde, Verlauf, Entlassungsdiagnose(n), Empfehlung.""",
+        "Aufklärungsgespräch": """Strukturiere den Text als Protokoll eines ärztlichen Aufklärungsgesprächs.
+Gliedere in: Gesprächsinhalte, Risiken/Nebenwirkungen, Patientenfragen, Zustimmung des Patienten.""",
+        "Abschlussgespräch": """Erstelle eine Zusammenfassung eines Abschlussgesprächs zwischen Arzt und Patient.
+Strukturiere in: Behandlungsverlauf, aktueller Zustand, empfohlene Nachsorge, Patientenzufriedenheit.""",
+        "Angehörigengespräch": """Protokolliere ein ärztliches Gespräch mit Angehörigen.
+Gliedere in: Informationsstand der Angehörigen, besprochene Inhalte, Fragen und Sorgen, weiteres Vorgehen."""
     }
 
     ausgewählte_struktur = st.selectbox("📄 Strukturtyp für den Arztbrief", list(struktur_optionen.keys()))
