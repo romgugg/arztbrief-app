@@ -10,7 +10,7 @@ from reportlab.platypus import Image, Table, TableStyle, Paragraph, Spacer, Simp
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 
-# === Streamlit UI ===
+# === UI ===
 st.set_page_config(page_title="📄 Arztbrief aus Audio-Datei", layout="centered")
 st.title("📄 Arztbrief aus Audio-Datei")
 
@@ -19,7 +19,7 @@ st.markdown("""
 Ein strukturierter Arztbrief wird automatisch generiert.
 """)
 
-# === API-Key Eingabe ===
+# === API-Key ===
 st.markdown("""
 🔐 Gib deinen persönlichen [OpenAI API-Key](https://platform.openai.com/account/api-keys) ein.  
 Dein Key wird **nicht gespeichert** – er wird nur für diese Sitzung genutzt.
@@ -33,7 +33,7 @@ if not api_key:
 client = OpenAI(api_key=api_key)
 
 # === PDF-Erstellung ===
-def create_pdf_report(brief_text, mit_briefkopf=False, logo_path="/mnt/data/e2bb590e-24d4-42a0-848f-8fa14fce774e.png"):
+def create_pdf_report(brief_text, mit_briefkopf=False, logo_path="logo.png"):
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=50, bottomMargin=50)
     styles = getSampleStyleSheet()
@@ -42,7 +42,8 @@ def create_pdf_report(brief_text, mit_briefkopf=False, logo_path="/mnt/data/e2bb
     if mit_briefkopf:
         try:
             logo = Image(logo_path, width=180, height=60)
-        except:
+        except Exception as e:
+            st.warning(f"⚠️ Logo konnte nicht geladen werden: {e}")
             logo = Paragraph("<b>KSW Winterthur</b>", styles["Title"])
 
         header_data = [
@@ -62,7 +63,6 @@ def create_pdf_report(brief_text, mit_briefkopf=False, logo_path="/mnt/data/e2bb
                 styles["Normal"]
             )]
         ]
-
         table = Table(header_data, colWidths=[200, 330])
         table.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
@@ -85,7 +85,7 @@ def create_pdf_report(brief_text, mit_briefkopf=False, logo_path="/mnt/data/e2bb
     buffer.seek(0)
     return buffer
 
-# === Transkriptionsstatus ===
+# === Status-Init ===
 if "transcription_done" not in st.session_state:
     st.session_state.transcription_done = False
 
@@ -101,7 +101,6 @@ if uploaded_file:
             tmp.write(uploaded_file.read())
             tmp_path = tmp.name
 
-        # Robust: zuerst versuchen wie gehabt
         try:
             with open(tmp_path, "rb") as audio_file:
                 transcript = client.audio.transcriptions.create(
@@ -138,7 +137,7 @@ if uploaded_file:
         st.write("📝 Transkriptionstext (Ausschnitt):", transcript.text[:300])
         st.download_button("⬇️ Transkript herunterladen", transcript.text, file_name="transkript.txt")
 
-# === Arztbriefgenerator ===
+# === Arztbrief erstellen ===
 if st.session_state.transcription_done:
     st.markdown("## 🧾 Arztbriefstruktur wählen")
 
