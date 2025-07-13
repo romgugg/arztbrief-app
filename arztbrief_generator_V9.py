@@ -181,4 +181,5 @@ Gliedere in: Informationsstand der Angehörigen, besprochene Inhalte, Fragen und
             if st.button("📄 PDF jetzt generieren"):
                 pdf_buffer = create_pdf_report(edited_report, mit_briefkopf=briefkopf_aktiv)
                 st.download_button("⬇️ PDF herunterladen", data=pdf_buffer, file_name="arztbrief.pdf", mime="application/pdf")
-                st.download_button("⬇️ Arztbrief als Textdatei", edited_report, file_name="arztbrief.txt")
+
+            st.download_button("⬇️ Arztbrief als Textdatei", edited_report, file_name="arztbrief.txt")
