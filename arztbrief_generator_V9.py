@@ -1,14 +1,16 @@
 import streamlit as st
-import base64
 import tempfile
 import os
+import subprocess
+import uuid
+import mimetypes
 from openai import OpenAI
 from io import BytesIO
 from reportlab.platypus import Image, Table, TableStyle, Paragraph, Spacer, SimpleDocTemplate
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 
-# === STREAMLIT UI ===
+# === Streamlit UI ===
 st.set_page_config(page_title="📄 Arztbrief aus Audio-Datei", layout="centered")
 st.title("📄 Arztbrief aus Audio-Datei")
 
@@ -17,7 +19,7 @@ st.markdown("""
 Ein strukturierter Arztbrief wird automatisch generiert.
 """)
 
-# === API-KEY EINGABE ===
+# === API-Key Eingabe ===
 st.markdown("""
 🔐 Gib deinen persönlichen [OpenAI API-Key](https://platform.openai.com/account/api-keys) ein.  
 Dein Key wird **nicht gespeichert** – er wird nur für diese Sitzung genutzt.
@@ -30,7 +32,7 @@ if not api_key:
 
 client = OpenAI(api_key=api_key)
 
-# === PDF-FUNKTION ===
+# === PDF-Erstellung ===
 def create_pdf_report(brief_text, mit_briefkopf=False, logo_path="/mnt/data/e2bb590e-24d4-42a0-848f-8fa14fce774e.png"):
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=50, bottomMargin=50)
@@ -83,10 +85,11 @@ def create_pdf_report(brief_text, mit_briefkopf=False, logo_path="/mnt/data/e2bb
     buffer.seek(0)
     return buffer
 
-# === TRANSKRIPTION ===
+# === Transkriptionsstatus ===
 if "transcription_done" not in st.session_state:
     st.session_state.transcription_done = False
 
+# === Datei-Upload ===
 uploaded_file = st.file_uploader("📤 Lade eine Audiodatei hoch", type=["mp3", "wav", "m4a", "webm"])
 
 if uploaded_file:
@@ -98,6 +101,7 @@ if uploaded_file:
             tmp.write(uploaded_file.read())
             tmp_path = tmp.name
 
+        # Robust: zuerst versuchen wie gehabt
         try:
             with open(tmp_path, "rb") as audio_file:
                 transcript = client.audio.transcriptions.create(
@@ -106,18 +110,26 @@ if uploaded_file:
                     language="de"
                 )
         except Exception:
-            import subprocess
-            import uuid
-            st.warning("⚠️ Datei konnte nicht verarbeitet werden. Konvertiere nach WAV...")
+            st.warning("⚠️ Ursprüngliche Datei konnte nicht verarbeitet werden. Versuche WAV-Konvertierung...")
             wav_path = tmp_path.replace(".webm", f"_{uuid.uuid4().hex}.wav")
             subprocess.run(["ffmpeg", "-y", "-i", tmp_path, wav_path], check=True)
-            with open(wav_path, "rb") as audio_file:
-                transcript = client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file,
-                    language="de"
-                )
-            os.remove(wav_path)
+
+            try:
+                with open(wav_path, "rb") as audio_file:
+                    mime_type, _ = mimetypes.guess_type(wav_path)
+                    if mime_type is None:
+                        mime_type = "audio/wav"
+
+                    transcript = client.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=audio_file,
+                        language="de"
+                    )
+            except Exception as inner_e:
+                st.error(f"❌ Auch WAV konnte nicht verarbeitet werden. Fehler: {inner_e}")
+                st.stop()
+            finally:
+                os.remove(wav_path)
 
         os.remove(tmp_path)
         st.session_state.transcription_text = transcript.text
@@ -126,7 +138,7 @@ if uploaded_file:
         st.write("📝 Transkriptionstext (Ausschnitt):", transcript.text[:300])
         st.download_button("⬇️ Transkript herunterladen", transcript.text, file_name="transkript.txt")
 
-# === GPT ARZTBRIEF ===
+# === Arztbriefgenerator ===
 if st.session_state.transcription_done:
     st.markdown("## 🧾 Arztbriefstruktur wählen")
 
