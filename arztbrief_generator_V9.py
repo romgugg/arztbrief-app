@@ -175,7 +175,7 @@ Gliedere in: Informationsstand der Angehörigen, besprochene Inhalte, Fragen und
             pdf_layout = st.selectbox("🖨️ PDF-Layout wählen", ["Standard (nur Text)", "Mit Logo & Briefkopf"], key="layout_select")
             briefkopf_aktiv = pdf_layout == "Mit Logo & Briefkopf"
 
-            if st.button("📄 PDF jetzt generieren"):
+   if st.button("📄 PDF jetzt generieren"):
     pdf_buffer = create_pdf_report(edited_report, mit_briefkopf=briefkopf_aktiv)
     st.download_button("⬇️ PDF herunterladen", data=pdf_buffer, file_name="arztbrief.pdf", mime="application/pdf")
     st.download_button("⬇️ Arztbrief als Textdatei", edited_report, file_name="arztbrief.txt")
