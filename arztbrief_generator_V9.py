@@ -8,7 +8,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 
-# UI-Konfiguration
+# Streamlit-Konfiguration
 st.set_page_config(page_title="📄 Arztbrief aus Audio-Datei", layout="centered")
 st.title("📄 Arztbrief aus Audio-Datei")
 
@@ -19,8 +19,8 @@ Ein strukturierter Arztbrief wird automatisch generiert.
 
 # 🔐 API-Key Eingabe
 st.markdown("""
-🔐 Gib deinen persönlichen [OpenAI API-Key](https://platform.openai.com/account/api-keys) ein, um die App zu verwenden.  
-Dein Key wird **nicht gespeichert** – nur für diese Sitzung genutzt.
+🔐 Gib deinen persönlichen [OpenAI API-Key](https://platform.openai.com/account/api-keys) ein.  
+Dein Key wird **nicht gespeichert** – er wird nur für diese Sitzung genutzt.
 """)
 
 api_key = st.text_input("OpenAI API-Key:", type="password")
@@ -28,7 +28,7 @@ if not api_key:
     st.info("Bitte gib deinen OpenAI API-Key ein, um fortzufahren.")
     st.stop()
 
-# OpenAI Setup mit Nutzer-Key
+# OpenAI Setup
 client = OpenAI(api_key=api_key)
 
 # PDF-Erstellung
@@ -48,7 +48,7 @@ def create_pdf_report(brief_text):
     buffer.seek(0)
     return buffer
 
-# Session-State Initialisierung
+# Initialisierung
 if "transcription_done" not in st.session_state:
     st.session_state.transcription_done = False
 
@@ -92,15 +92,48 @@ if uploaded_file:
         st.write("📝 Transkriptionstext (Ausschnitt):", transcript.text[:300])
         st.download_button("⬇️ Vollständige Transkription", transcript.text, file_name="transkript.txt")
 
-# GPT-Arztbrief erzeugen
+# Strukturwahl und Arztbrief-Generierung
 if st.session_state.transcription_done:
+    st.markdown("## 🧾 Arztbriefstruktur wählen")
+
+    struktur_optionen = {
+        "Arztbrief Standard": """
+Du bist ein medizinischer Assistent, der aus Transkripten strukturierte Arztbriefe erstellt.
+Gliedere in: Anamnese, Diagnose, Therapie, Aufklärung, Organisatorisches, Operationsplanung, Patientenwunsch.
+Füge drei passende ICD-10-Codes unter Diagnose hinzu (Format: Bezeichnung → Code).
+""",
+        "Kurzarztbrief": """
+Erstelle einen kompakten medizinischen Arztbrief basierend auf einem Transkript.
+Fasse die wichtigsten Punkte kurz und prägnant zusammen: Anamnese, Diagnose, Therapie.
+Der Brief soll sich auf maximal eine halbe Seite beschränken.
+""",
+        "Ambulante Konsultation": """
+Erstelle einen strukturierten Bericht einer ambulanten Konsultation.
+Berücksichtige: Anlass, subjektiver Bericht, objektive Befunde, Diagnose(n), Therapieempfehlung.
+""",
+        "Stationäre Konsultation": """
+Verfasse einen strukturierten Arztbrief einer stationären Konsultation.
+Struktur: Aufnahmegrund, Anamnese, Untersuchungsbefunde, Verlauf, Entlassungsdiagnose(n), Empfehlung.
+""",
+        "Aufklärungsgespräch": """
+Strukturiere den Text als Protokoll eines ärztlichen Aufklärungsgesprächs.
+Gliedere in: Gesprächsinhalt, Risiken/Nebenwirkungen, Patientenfragen, Zustimmung des Patienten.
+""",
+        "Abschlussgespräch": """
+Erstelle eine Zusammenfassung eines Abschlussgesprächs zwischen Arzt und Patient.
+Strukturiere in: Behandlungsverlauf, aktueller Zustand, empfohlene Nachsorge, Patientenzufriedenheit.
+""",
+        "Angehörigengespräch": """
+Protokolliere ein ärztliches Gespräch mit Angehörigen.
+Gliedere in: Informationsstand der Angehörigen, besprochene Inhalte, Fragen und Sorgen, weiteres Vorgehen.
+"""
+    }
+
+    ausgewählte_struktur = st.selectbox("📄 Strukturtyp für den Arztbrief", list(struktur_optionen.keys()))
+    system_prompt = struktur_optionen[ausgewählte_struktur]
+
     if st.button("🧠 Arztbrief generieren mit GPT"):
         with st.spinner("💬 GPT erstellt den Arztbrief..."):
-            system_prompt = """
-            Du bist ein medizinischer Assistent, der aus Transkripten strukturierte Arztbriefe erstellt.
-            Gliedere in: Anamnese, Diagnose, Therapie, Aufklärung, Organisatorisches, Operationsplanung, Patientenwunsch.
-            Füge drei passende ICD-10-Codes unter Diagnose hinzu (Format: Bezeichnung → Code).
-            """
             chat = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
@@ -111,7 +144,7 @@ if st.session_state.transcription_done:
             )
             report = chat.choices[0].message.content.strip()
 
-            st.subheader("📄 Arztbrief")
+            st.subheader("📄 Generierter Arztbrief")
             st.text_area("Arztbrief mit ICD-10-Codes", report, height=400)
 
             pdf_buffer = create_pdf_report(report)
